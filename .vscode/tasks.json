@@ -4,6 +4,12 @@
         {
             "label": "Build CPBL",
             "type": "shell",
+            "options": {
+                "shell": {
+                    "executable": "cmd.exe",
+                    "args": ["/d", "/c"]
+                }
+            },
             "command": "gcc",
             "args": [
                 "db.c",
@@ -11,8 +17,9 @@
                 "Admin_Interface.c",
                 "-o",
                 "CPBL.exe",
-                "-I\"C:\\Program Files\\MySQL\\MySQL Server 8.0\\include\"",
-                "\"C:\\Program Files\\MySQL\\MySQL Server 8.0\\lib\\libmysql.lib\""
+                "-I",
+                "C:\\Program Files\\MySQL\\MySQL Server 8.0\\include",
+                "C:\\Program Files\\MySQL\\MySQL Server 8.0\\lib\\libmysql.lib"
             ],
             "group": {
                 "kind": "build",

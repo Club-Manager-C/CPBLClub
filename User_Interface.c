@@ -1,0 +1,113 @@
+#include "db.h"
+#include <ctype.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+typedef struct {
+  char id[50];
+  char pw[50];
+  char nickname[50];
+} Account;
+
+void home_screen() {
+  printf("\n=== 홈 화면 ===\n");
+  printf("홈 화면에 입장했습니다.\n");
+  // TODO: 홈 화면 기능 구현
+}
+
+int main() {
+  MYSQL *conn;
+  init_db(&conn);
+
+  int choice;
+  int is_logged_in = 0;
+
+  while (1) {
+    printf("\n=== 시작 화면 ===\n");
+    printf("1. 로그인\n");
+    printf("2. 회원가입\n");
+    printf("3. 종료\n");
+    printf("입력: ");
+    scanf("%d", &choice);
+
+    if (choice == 1) {
+      int fail_count = 0;
+      char id[50];
+      char pw[50];
+
+      while (fail_count < 5) {
+        printf("\n아이디: ");
+        scanf("%s", id);
+        printf("PW: ");
+        scanf("%s", pw);
+
+        if (check_login(conn, id, pw)) {
+          printf("성공했습니다.\n");
+          is_logged_in = 1;
+          break;
+        } else {
+          fail_count++;
+          printf("아이디 혹은 PW를 잘 못 입력했습니다.\n");
+          printf("틀린 횟수: %d\n", fail_count);
+        }
+      }
+
+      if (fail_count == 5) {
+        printf("5번 틀렸습니다.\n");
+        continue;
+      }
+
+      if (is_logged_in) {
+        home_screen();
+        break;
+      }
+    } else if (choice == 2) {
+      Account new_account;
+      int valid_id = 0;
+
+      while (!valid_id) {
+        printf("\n아이디: ");
+        scanf("%s", new_account.id);
+
+        int is_alnum = 1;
+        for (int i = 0; new_account.id[i] != '\0'; i++) {
+          if (!isalnum((unsigned char)new_account.id[i])) {
+            is_alnum = 0;
+            break;
+          }
+        }
+
+        if (!is_alnum) {
+          printf("영문자로 입력해주세요\n");
+          continue;
+        }
+
+        if (check_id_duplicate(conn, new_account.id)) {
+          printf("이미 있는 아이디입니다.\n");
+          continue;
+        }
+
+        valid_id = 1;
+      }
+
+      printf("비밀번호: ");
+      scanf("%s", new_account.pw);
+      printf("닉네임: ");
+      scanf("%s", new_account.nickname);
+
+      if (register_user(conn, new_account.id, new_account.pw,
+                        new_account.nickname)) {
+        printf("회원가입이 성공적으로 완료되었습니다!\n");
+      }
+    } else if (choice == 3) {
+      printf("프로그램을 종료합니다.\n");
+      break;
+    } else {
+      printf("잘못된 입력입니다.\n");
+    }
+  }
+
+  close_db(conn);
+  return 0;
+}
