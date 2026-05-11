@@ -29,7 +29,11 @@ void init_db(MYSQL **conn) {
   const char *create_table_query = "CREATE TABLE IF NOT EXISTS users ("
                                    "id VARCHAR(50) PRIMARY KEY, "
                                    "pw VARCHAR(50) NOT NULL, "
-                                   "nickname VARCHAR(50) NOT NULL)";
+                                   "nickname VARCHAR(50) NOT NULL, "
+                                   "student_id BIGINT UNIQUE NOT NULL, "
+                                   "name VARCHAR(50) NOT NULL, "
+                                   "major VARCHAR(50) NOT NULL, "
+                                   "phone VARCHAR(20) NOT NULL)";
   if (mysql_query(*conn, create_table_query)) {
     fprintf(stderr, "테이블 생성 실패: %s\n", mysql_error(*conn));
   }
@@ -84,9 +88,28 @@ int check_nickname_duplicate(MYSQL *conn, const char *nickname) {
   return 0; // 중복 안됨 (사용 가능)
 }
 
-int register_user(MYSQL *conn, const char *id, const char *pw, const char *nickname) {
-  char query[512];
-  sprintf(query, "INSERT INTO users (id, pw, nickname) VALUES ('%s', '%s', '%s')", id, pw, nickname);
+int check_student_id_duplicate(MYSQL *conn, long long student_id) {
+  char query[256];
+  sprintf(query, "SELECT student_id FROM users WHERE student_id = %lld", student_id);
+  if (mysql_query(conn, query) == 0) {
+    MYSQL_RES *res = mysql_store_result(conn);
+    if (res != NULL && mysql_num_rows(res) > 0) {
+      mysql_free_result(res);
+      return 1; // 중복됨
+    }
+    if (res != NULL) mysql_free_result(res);
+  }
+  return 0; // 중복 안됨
+}
+
+int register_user(MYSQL *conn, const char *id, const char *pw,
+                  const char *nickname, long long student_id,
+                  const char *name, const char *major, const char *phone) {
+  char query[768];
+  sprintf(query,
+    "INSERT INTO users (id, pw, nickname, student_id, name, major, phone) "
+    "VALUES ('%s', '%s', '%s', %lld, '%s', '%s', '%s')",
+    id, pw, nickname, student_id, name, major, phone);
 
   if (mysql_query(conn, query)) {
     fprintf(stderr, "회원가입 실패: %s\n", mysql_error(conn));

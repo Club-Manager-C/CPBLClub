@@ -8,6 +8,10 @@ typedef struct {
   char id[50];
   char pw[50];
   char nickname[50];
+  long long student_id; // 10자리 학번
+  char name[50];       // 이름
+  char major[50];      // 전공
+  char phone[20];      // 전화번호
 } Account;
 
 // 영문+숫자+허용 특수문자(!?$)만 포함하는지 검사
@@ -149,8 +153,49 @@ int main() {
         valid_nick = 1;
       }
 
+      // ── 학번 입력 (RBQ-SU-04) ──
+      // 규칙: 1000000000 ~ 9999999999 (10자리), 중복 불가
+      int valid_sid = 0;
+      while (!valid_sid) {
+        printf("학번 (10자리 숫자): ");
+        // 이전 입력에서 남은 개행 문자(\n) 제거
+        while (getchar() != '\n'); 
+
+        if (scanf("%lld", &new_account.student_id) != 1) {
+          // 숫자가 아닌 입력 처리
+          int c;
+          while ((c = getchar()) != '\n' && c != EOF); // 버퍼 비우기
+          printf("숫자만 입력해주세요.\n");
+          continue;
+        }
+
+        if (new_account.student_id < 1000000000LL ||
+            new_account.student_id > 9999999999LL) {
+          printf("학번은 정확히 10자리여야 합니다.\n");
+          continue;
+        }
+
+        if (check_student_id_duplicate(conn, new_account.student_id)) {
+          printf("이미 가입된 학번입니다.\n");
+          continue;
+        }
+        valid_sid = 1;
+      }
+
+      // ── 기타 개인정보 입력 (RBQ-SU-05) ──
+      printf("이름: ");
+      scanf("%s", new_account.name);
+
+      printf("전공: ");
+      scanf("%s", new_account.major);
+
+      printf("전화번호 (예: 010-1234-5678): ");
+      scanf("%s", new_account.phone);
+
       if (register_user(conn, new_account.id, new_account.pw,
-                        new_account.nickname)) {
+                        new_account.nickname, new_account.student_id,
+                        new_account.name, new_account.major,
+                        new_account.phone)) {
         printf("회원가입이 성공적으로 완료되었습니다!\n");
       }
     } else if (choice == 3) {
