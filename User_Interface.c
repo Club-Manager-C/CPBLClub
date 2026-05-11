@@ -8,7 +8,7 @@ typedef struct {
   char id[50];
   char pw[50];
   char nickname[50];
-  char student_id[12]; // 10자리 학번
+  long long student_id; // 10자리 학번
   char name[50];       // 이름
   char major[50];      // 전공
   char phone[20];      // 전화번호
@@ -154,27 +154,24 @@ int main() {
       }
 
       // ── 학번 입력 (RBQ-SU-04) ──
-      // 규칙: 정확히 10자리 숫자, 중복 불가
+      // 규칙: 1000000000 ~ 9999999999 (10자리), 중복 불가
       int valid_sid = 0;
       while (!valid_sid) {
-        printf("학번 (10자리): ");
-        scanf("%s", new_account.student_id);
+        printf("학번 (10자리 숫자): ");
+        // 이전 입력에서 남은 개행 문자(\n) 제거
+        while (getchar() != '\n'); 
 
-        int len = (int)strlen(new_account.student_id);
-        if (len != 10) {
-          printf("학번은 정확히 10자리여야 합니다. (현재 %d자리)\n", len);
+        if (scanf("%lld", &new_account.student_id) != 1) {
+          // 숫자가 아닌 입력 처리
+          int c;
+          while ((c = getchar()) != '\n' && c != EOF); // 버퍼 비우기
+          printf("숫자만 입력해주세요.\n");
           continue;
         }
 
-        int all_digit = 1;
-        for (int i = 0; i < len; i++) {
-          if (!isdigit((unsigned char)new_account.student_id[i])) {
-            all_digit = 0;
-            break;
-          }
-        }
-        if (!all_digit) {
-          printf("학번은 숫자만 입력해주세요.\n");
+        if (new_account.student_id < 1000000000LL ||
+            new_account.student_id > 9999999999LL) {
+          printf("학번은 정확히 10자리여야 합니다.\n");
           continue;
         }
 
