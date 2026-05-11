@@ -10,6 +10,27 @@ typedef struct {
   char nickname[50];
 } Account;
 
+// 영문+숫자+허용 특수문자(!?$)만 포함하는지 검사
+// has_alpha: 영문자 포함 여부, has_digit: 숫자 포함 여부 반환 (포인터)
+// 반환값: 1 = 형식 OK, 0 = 허용되지 않는 문자 포함
+int validate_format(const char *str, int *has_alpha, int *has_digit) {
+  *has_alpha = 0;
+  *has_digit = 0;
+  for (int i = 0; str[i] != '\0'; i++) {
+    unsigned char c = (unsigned char)str[i];
+    if (isalpha(c)) {
+      *has_alpha = 1;
+    } else if (isdigit(c)) {
+      *has_digit = 1;
+    } else if (c == '!' || c == '?' || c == '$') {
+      // 허용된 특수문자
+    } else {
+      return 0; // 허용되지 않는 문자
+    }
+  }
+  return 1; // 모든 문자가 유효
+}
+
 void home_screen() {
   printf("\n=== 홈 화면 ===\n");
   printf("홈 화면에 입장했습니다.\n");
@@ -19,6 +40,7 @@ void home_screen() {
 int main() {
   MYSQL *conn;
   init_db(&conn);
+
 
   int choice;
   int is_logged_in = 0;
@@ -66,6 +88,7 @@ int main() {
       Account new_account;
       int valid_id = 0;
 
+      // ── 아이디 입력 ──
       while (!valid_id) {
         printf("\n아이디: ");
         scanf("%s", new_account.id);
@@ -91,10 +114,40 @@ int main() {
         valid_id = 1;
       }
 
-      printf("비밀번호: ");
-      scanf("%s", new_account.pw);
-      printf("닉네임: ");
-      scanf("%s", new_account.nickname);
+      // ── 비밀번호 입력 ──
+      // 규칙: 영문+숫자 조합 필수, 허용 특수문자 !?$ 만 가능
+      int valid_pw = 0;
+      while (!valid_pw) {
+        printf("비밀번호 (영문+숫자 필수, 특수문자는 !?$만 허용): ");
+        scanf("%s", new_account.pw);
+
+        int has_alpha = 0, has_digit = 0;
+        int fmt_ok = validate_format(new_account.pw, &has_alpha, &has_digit);
+
+        if (!fmt_ok) {
+          printf("비밀번호 형식이 틀렸습니다. (허용 문자: 영문, 숫자, !?$)\n");
+          continue;
+        }
+        if (!has_alpha || !has_digit) {
+          printf("비밀번호 형식이 틀렸습니다. (영문자와 숫자를 반드시 포함해야 합니다)\n");
+          continue;
+        }
+        valid_pw = 1;
+      }
+
+      // ── 닉네임 입력 ──
+      // 규칙: 중복 불가
+      int valid_nick = 0;
+      while (!valid_nick) {
+        printf("닉네임: ");
+        scanf("%s", new_account.nickname);
+
+        if (check_nickname_duplicate(conn, new_account.nickname)) {
+          printf("이미 있는 닉네임입니다.\n");
+          continue;
+        }
+        valid_nick = 1;
+      }
 
       if (register_user(conn, new_account.id, new_account.pw,
                         new_account.nickname)) {

@@ -7,6 +7,7 @@
 void init_db(MYSQL **conn);
 int check_login(MYSQL *conn, const char *id, const char *pw);
 int check_id_duplicate(MYSQL *conn, const char *id);
+int check_nickname_duplicate(MYSQL *conn, const char *nickname);
 int register_user(MYSQL *conn, const char *id, const char *pw, const char *nickname);
 void close_db(MYSQL *conn);
 

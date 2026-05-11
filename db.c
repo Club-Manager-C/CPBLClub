@@ -70,6 +70,20 @@ int check_id_duplicate(MYSQL *conn, const char *id) {
   return 0; // 중복 안됨 (사용 가능)
 }
 
+int check_nickname_duplicate(MYSQL *conn, const char *nickname) {
+  char query[256];
+  sprintf(query, "SELECT nickname FROM users WHERE nickname = '%s'", nickname);
+  if (mysql_query(conn, query) == 0) {
+    MYSQL_RES *res = mysql_store_result(conn);
+    if (res != NULL && mysql_num_rows(res) > 0) {
+      mysql_free_result(res);
+      return 1; // 중복됨
+    }
+    if (res != NULL) mysql_free_result(res);
+  }
+  return 0; // 중복 안됨 (사용 가능)
+}
+
 int register_user(MYSQL *conn, const char *id, const char *pw, const char *nickname) {
   char query[512];
   sprintf(query, "INSERT INTO users (id, pw, nickname) VALUES ('%s', '%s', '%s')", id, pw, nickname);
