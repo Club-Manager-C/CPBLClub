@@ -35,10 +35,71 @@ int validate_format(const char *str, int *has_alpha, int *has_digit) {
   return 1; // 모든 문자가 유효
 }
 
-void home_screen() {
-  printf("\n=== 홈 화면 ===\n");
-  printf("홈 화면에 입장했습니다.\n");
-  // TODO: 홈 화면 기능 구현
+// ─────────────────────────────────────────────
+// 메뉴별 스텁 함수 (추후 각 파일에서 구현 예정)
+// ─────────────────────────────────────────────
+
+void promo_board() {
+  printf("\n=== 동아리 홍보 게시판 ===\n");
+  printf("(준비 중입니다)\n");
+}
+
+void major_club_board() {
+  printf("\n=== 전공 동아리 게시판 ===\n");
+  printf("(준비 중입니다)\n");
+}
+
+void my_page(const char *logged_id) {
+  printf("\n=== 마이페이지 ===\n");
+  printf("현재 계정: %s\n", logged_id);
+  printf("(준비 중입니다)\n");
+}
+
+void apply_club_leader() {
+  printf("\n=== 동아리장 신청 ===\n");
+  printf("(준비 중입니다)\n");
+}
+
+// ─────────────────────────────────────────────
+// 메인 화면 (로그인 후 진입)
+// ─────────────────────────────────────────────
+
+void home_screen(const char *logged_id) {
+  int choice;
+
+  while (1) {
+    printf("\n============================\n");
+    printf("  메인 메뉴\n");
+    printf("============================\n");
+    printf("1. 동아리 홍보 게시판\n");
+    printf("2. 전공 동아리 게시판\n");
+    printf("3. 마이페이지\n");
+    printf("4. 동아리장 신청\n");
+    printf("0. 로그아웃\n");
+    printf("============================\n");
+    printf("입력: ");
+    scanf("%d", &choice);
+
+    switch (choice) {
+      case 1:
+        promo_board();
+        break;
+      case 2:
+        major_club_board();
+        break;
+      case 3:
+        my_page(logged_id);
+        break;
+      case 4:
+        apply_club_leader();
+        break;
+      case 0:
+        printf("로그아웃 합니다.\n");
+        return;
+      default:
+        printf("잘못된 입력입니다.\n");
+    }
+  }
 }
 
 int main() {
@@ -85,8 +146,8 @@ int main() {
       }
 
       if (is_logged_in) {
-        home_screen();
-        break;
+        home_screen(id);
+        is_logged_in = 0; // 로그아웃 후 시작 화면으로 복귀
       }
     } else if (choice == 2) {
       Account new_account;
