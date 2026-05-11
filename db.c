@@ -35,7 +35,49 @@ void init_db(MYSQL **conn) {
                                    "major VARCHAR(50) NOT NULL, "
                                    "phone VARCHAR(20) NOT NULL)";
   if (mysql_query(*conn, create_table_query)) {
-    fprintf(stderr, "테이블 생성 실패: %s\n", mysql_error(*conn));
+    fprintf(stderr, "테이블 생성 실패(users): %s\n", mysql_error(*conn));
+  }
+
+  // 게시글 테이블
+  const char *create_posts =
+    "CREATE TABLE IF NOT EXISTS posts ("
+    "post_id INT AUTO_INCREMENT PRIMARY KEY, "
+    "user_id VARCHAR(50) NOT NULL, "
+    "title VARCHAR(200) NOT NULL, "
+    "content TEXT NOT NULL, "
+    "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+    "FOREIGN KEY (user_id) REFERENCES users(id))";
+  if (mysql_query(*conn, create_posts)) {
+    fprintf(stderr, "테이블 생성 실패(posts): %s\n", mysql_error(*conn));
+  }
+
+  // 댓글 테이블
+  const char *create_comments =
+    "CREATE TABLE IF NOT EXISTS comments ("
+    "comment_id INT AUTO_INCREMENT PRIMARY KEY, "
+    "post_id INT NOT NULL, "
+    "user_id VARCHAR(50) NOT NULL, "
+    "content TEXT NOT NULL, "
+    "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+    "FOREIGN KEY (user_id) REFERENCES users(id), "
+    "FOREIGN KEY (post_id) REFERENCES posts(post_id))";
+  if (mysql_query(*conn, create_comments)) {
+    fprintf(stderr, "테이블 생성 실패(comments): %s\n", mysql_error(*conn));
+  }
+
+  // 시간표 테이블
+  const char *create_schedules =
+    "CREATE TABLE IF NOT EXISTS schedules ("
+    "schedule_id INT AUTO_INCREMENT PRIMARY KEY, "
+    "user_id VARCHAR(50) NOT NULL, "
+    "day_of_week VARCHAR(10) NOT NULL, "
+    "start_time VARCHAR(10) NOT NULL, "
+    "end_time VARCHAR(10) NOT NULL, "
+    "subject VARCHAR(100) NOT NULL, "
+    "location VARCHAR(100) NOT NULL, "
+    "FOREIGN KEY (user_id) REFERENCES users(id))";
+  if (mysql_query(*conn, create_schedules)) {
+    fprintf(stderr, "테이블 생성 실패(schedules): %s\n", mysql_error(*conn));
   }
 }
 
@@ -116,6 +158,158 @@ int register_user(MYSQL *conn, const char *id, const char *pw,
     return 0; // 실패
   }
   return 1; // 성공
+}
+
+// ─────────────────────────────────────────────────
+// 내 게시글 목록 출력
+// ─────────────────────────────────────────────────
+void get_my_posts(MYSQL *conn, const char *user_id) {
+  char query[512];
+  sprintf(query,
+    "SELECT post_id, title, created_at FROM posts "
+    "WHERE user_id = '%s' ORDER BY created_at DESC",
+    user_id);
+  if (mysql_query(conn, query)) {
+    fprintf(stderr, "쿼리 실패: %s\n", mysql_error(conn));
+    return;
+  }
+  MYSQL_RES *res = mysql_store_result(conn);
+  if (res == NULL) return;
+  if (mysql_num_rows(res) == 0) {
+    printf("작성한 게시글이 없습니다.\n");
+    mysql_free_result(res);
+    return;
+  }
+  printf("%-6s %-30s %-20s\n", "ID", "제목", "작성일");
+  printf("------------------------------------------------------------\n");
+  MYSQL_ROW row;
+  while ((row = mysql_fetch_row(res))) {
+    printf("[%-4s] %-30s %s\n", row[0], row[1], row[2]);
+  }
+  mysql_free_result(res);
+}
+
+// 게시글 내용 수정
+int update_post(MYSQL *conn, int post_id, const char *user_id,
+                const char *new_content) {
+  char query[768];
+  sprintf(query,
+    "UPDATE posts SET content = '%s' "
+    "WHERE post_id = %d AND user_id = '%s'",
+    new_content, post_id, user_id);
+  if (mysql_query(conn, query)) {
+    fprintf(stderr, "수정 실패: %s\n", mysql_error(conn));
+    return 0;
+  }
+  return (int)mysql_affected_rows(conn) > 0 ? 1 : 0;
+}
+
+// ─────────────────────────────────────────────────
+// 내 댓글 목록 출력
+// ─────────────────────────────────────────────────
+void get_my_comments(MYSQL *conn, const char *user_id) {
+  char query[512];
+  sprintf(query,
+    "SELECT c.comment_id, p.title, c.content, c.created_at "
+    "FROM comments c JOIN posts p ON c.post_id = p.post_id "
+    "WHERE c.user_id = '%s' ORDER BY c.created_at DESC",
+    user_id);
+  if (mysql_query(conn, query)) {
+    fprintf(stderr, "쿼리 실패: %s\n", mysql_error(conn));
+    return;
+  }
+  MYSQL_RES *res = mysql_store_result(conn);
+  if (res == NULL) return;
+  if (mysql_num_rows(res) == 0) {
+    printf("작성한 댓글이 없습니다.\n");
+    mysql_free_result(res);
+    return;
+  }
+  printf("%-6s %-20s %-30s %-20s\n", "ID", "게시글 제목", "댓글 내용", "작성일");
+  printf("------------------------------------------------------------\n");
+  MYSQL_ROW row;
+  while ((row = mysql_fetch_row(res))) {
+    printf("[%-4s] %-20s %-30s %s\n", row[0], row[1], row[2], row[3]);
+  }
+  mysql_free_result(res);
+}
+
+// 댓글 내용 수정
+int update_comment(MYSQL *conn, int comment_id, const char *user_id,
+                   const char *new_content) {
+  char query[768];
+  sprintf(query,
+    "UPDATE comments SET content = '%s' "
+    "WHERE comment_id = %d AND user_id = '%s'",
+    new_content, comment_id, user_id);
+  if (mysql_query(conn, query)) {
+    fprintf(stderr, "수정 실패: %s\n", mysql_error(conn));
+    return 0;
+  }
+  return (int)mysql_affected_rows(conn) > 0 ? 1 : 0;
+}
+
+// ─────────────────────────────────────────────────
+// 시간표 목록 출력
+// ─────────────────────────────────────────────────
+void get_my_schedule(MYSQL *conn, const char *user_id) {
+  char query[512];
+  sprintf(query,
+    "SELECT schedule_id, day_of_week, start_time, end_time, subject, location "
+    "FROM schedules WHERE user_id = '%s' "
+    "ORDER BY FIELD(day_of_week,'월','화','수','목','금','토','일'), start_time",
+    user_id);
+  if (mysql_query(conn, query)) {
+    fprintf(stderr, "쿼리 실패: %s\n", mysql_error(conn));
+    return;
+  }
+  MYSQL_RES *res = mysql_store_result(conn);
+  if (res == NULL) return;
+  if (mysql_num_rows(res) == 0) {
+    printf("등록된 시간표가 없습니다.\n");
+    mysql_free_result(res);
+    return;
+  }
+  printf("%-6s %-5s %-7s %-7s %-20s %-20s\n",
+         "ID", "요일", "시작", "종료", "과목명", "강의실");
+  printf("------------------------------------------------------------\n");
+  MYSQL_ROW row;
+  while ((row = mysql_fetch_row(res))) {
+    printf("[%-4s] %-5s %-7s %-7s %-20s %-20s\n",
+           row[0], row[1], row[2], row[3], row[4], row[5]);
+  }
+  mysql_free_result(res);
+}
+
+// 시간표 항목 추가
+int add_schedule(MYSQL *conn, const char *user_id, const char *day,
+                 const char *start, const char *end,
+                 const char *subject, const char *location) {
+  char query[512];
+  sprintf(query,
+    "INSERT INTO schedules "
+    "(user_id, day_of_week, start_time, end_time, subject, location) "
+    "VALUES ('%s','%s','%s','%s','%s','%s')",
+    user_id, day, start, end, subject, location);
+  if (mysql_query(conn, query)) {
+    fprintf(stderr, "추가 실패: %s\n", mysql_error(conn));
+    return 0;
+  }
+  return 1;
+}
+
+// 시간표 항목 삭제
+int delete_schedule(MYSQL *conn, int schedule_id, const char *user_id) {
+  char query[256];
+  sprintf(query,
+    "DELETE FROM schedules "
+    "WHERE schedule_id = %d AND user_id = '%s'",
+    schedule_id, user_id);
+  if (mysql_query(conn, query)) {
+    fprintf(stderr, "삭제 실패: %s\n", mysql_error(conn));
+    return 0;
+  }
+  return (int)mysql_affected_rows(conn) > 0 ? 1 : 0;
 }
 
 void close_db(MYSQL *conn) {
