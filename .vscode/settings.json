@@ -38,6 +38,6 @@
     "**/.vscode/**"
   ],
   "code-runner.executorMap": {
-    "c": "cd $dir && gcc db.c User_Interface.c Admin_Interface.c -o CPBL.exe -I \"C:\\Program Files\\MySQL\\MySQL Server 8.0\\include\" \"C:\\Program Files\\MySQL\\MySQL Server 8.0\\lib\\libmysql.lib\" && .\\CPBL.exe"
+    "c": "cd $dir && gcc db.c auth.c board.c mypage.c main.c Admin_Interface.c -o CPBL.exe -I \"C:\\Program Files\\MySQL\\MySQL Server 8.0\\include\" \"C:\\Program Files\\MySQL\\MySQL Server 8.0\\lib\\libmysql.lib\" && .\\CPBL.exe"
   }
 }
