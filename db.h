@@ -18,6 +18,7 @@ void close_db(MYSQL *conn);
 void get_my_posts(MYSQL *conn, const char *user_id);
 int  update_post(MYSQL *conn, int post_id, const char *user_id,
                  const char *new_content);
+void get_posts_by_category(MYSQL *conn, int category_id);
 
 // ── 댓글 ────────────────────────────────────────
 void get_my_comments(MYSQL *conn, const char *user_id);

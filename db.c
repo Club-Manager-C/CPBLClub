@@ -16,6 +16,7 @@ void init_db(MYSQL **conn) {
   }
 
   // DB 서버 접속
+
   if (mysql_real_connect(*conn, DB_HOST, DB_USER, DB_PW, NULL, 3306, NULL, 0) == NULL) {
     fprintf(stderr, "MySQL 연결 실패: %s\n", mysql_error(*conn));
     exit(1);
@@ -79,6 +80,16 @@ void init_db(MYSQL **conn) {
   if (mysql_query(*conn, create_schedules)) {
     fprintf(stderr, "테이블 생성 실패(schedules): %s\n", mysql_error(*conn));
   }
+
+  // 카테고리 테이블 생성 및 초기화
+  mysql_query(*conn, "CREATE TABLE IF NOT EXISTS categories ("
+                     "category_id INT PRIMARY KEY, "
+                     "name VARCHAR(50) NOT NULL)");
+  mysql_query(*conn, "INSERT IGNORE INTO categories (category_id, name) VALUES (1, '동아리 홍보'), (2, '전공 동아리')");
+
+  // posts 테이블에 category_id 컬럼 추가 (없을 경우)
+  mysql_query(*conn, "ALTER TABLE posts ADD COLUMN IF NOT EXISTS category_id INT DEFAULT 1");
+  mysql_query(*conn, "ALTER TABLE posts ADD FOREIGN KEY (category_id) REFERENCES categories(category_id)");
 }
 
 int check_login(MYSQL *conn, const char *id, const char *pw) {
@@ -202,6 +213,38 @@ int update_post(MYSQL *conn, int post_id, const char *user_id,
     return 0;
   }
   return (int)mysql_affected_rows(conn) > 0 ? 1 : 0;
+}
+
+// 카테고리별 게시글 조회
+void get_posts_by_category(MYSQL *conn, int category_id) {
+  char query[512];
+  sprintf(query,
+    "SELECT p.post_id, p.title, u.nickname, p.created_at "
+    "FROM posts p JOIN users u ON p.user_id = u.id "
+    "WHERE p.category_id = %d ORDER BY p.created_at DESC",
+    category_id);
+
+  if (mysql_query(conn, query)) {
+    fprintf(stderr, "게시글 조회 실패: %s\n", mysql_error(conn));
+    return;
+  }
+
+  MYSQL_RES *res = mysql_store_result(conn);
+  if (res == NULL) return;
+
+  if (mysql_num_rows(res) == 0) {
+    printf("게시글이 없습니다.\n");
+    mysql_free_result(res);
+    return;
+  }
+
+  printf("%-6s %-30s %-15s %-20s\n", "ID", "제목", "작성자", "작성일");
+  printf("--------------------------------------------------------------------------\n");
+  MYSQL_ROW row;
+  while ((row = mysql_fetch_row(res))) {
+    printf("[%-4s] %-30s %-15s %s\n", row[0], row[1], row[2], row[3]);
+  }
+  mysql_free_result(res);
 }
 
 // ─────────────────────────────────────────────────

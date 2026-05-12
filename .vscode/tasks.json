@@ -13,7 +13,10 @@
             "command": "gcc",
             "args": [
                 "db.c",
-                "User_Interface.c",
+                "auth.c",
+                "board.c",
+                "mypage.c",
+                "main.c",
                 "Admin_Interface.c",
                 "-o",
                 "CPBL.exe",
