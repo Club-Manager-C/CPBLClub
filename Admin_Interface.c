@@ -1,4 +1,6 @@
 #include "db.h"
+#include "category.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,7 +33,7 @@ void admin_home_screen(MYSQL *conn) {
                 printf("\n[동아리장 승인]\n(준비 중입니다)\n");
                 break;
             case 4:
-                printf("\n[동아리 카테고리 설정]\n(준비 중입니다)\n");
+                category_menu(conn);
                 break;
             case 0:
                 printf("관리자 프로그램을 종료합니다.\n");
@@ -53,6 +55,12 @@ int main() {
     const char *ADMIN_ID = "admin";
     const char *ADMIN_PW = "admin1234";
 
+    //카테고리 목록 초기화
+    mysql_query(conn,
+        "INSERT INTO club_categories(category_name) "
+        "VALUES ('전공'), ('밴드'), ('댄스'), ('봉사'), ('취미'), ('운동')");
+
+
     printf("\n=== 총관리자 프로그램 ===\n");
     printf("아이디: ");
     scanf("%s", id);
@@ -66,6 +74,7 @@ int main() {
         printf("아이디 또는 비밀번호가 틀렸습니다.\n");
     }
 
+    
     close_db(conn);
     return 0;
 }
