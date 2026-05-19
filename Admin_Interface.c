@@ -47,20 +47,17 @@ void admin_home_screen(MYSQL *conn) {
 
 
 void run_admin_interface(MYSQL *conn) {
-    //카테고리 목록 초기화
-    mysql_query(conn,
-        "INSERT IGNORE INTO club_categories(category_name) "
-        "VALUES ('전공'), ('밴드'), ('댄스'), ('봉사'), ('취미'), ('운동')");
+    // 카테고리는 db.c의 init_db에서 초기화되므로 생략합니다.
 
     //동아리 승인 대기 목록 생성 (테스트용)
 // 예시: category_id 1(예: 스포츠, 학술 등)이 이미 생성되어 있다고 가정
     int res = mysql_query(conn,
             "INSERT IGNORE INTO clubs "
-            "(club_name, category_id, status) "
+            "(club_name, category_id, leader_id, purpose, status, apply_date) "
             "VALUES "
-            "('inherit', 1, '대기'),"
-            "('basketball', 1, '대기'),"
-            "('soccer', 1, '대기')"
+            "('inherit', 1, 'admin', '테스트 목적', '대기', '2026-05-19 12:00:00'),"
+            "('basketball', 1, 'admin', '농구 동아리', '대기', '2026-05-19 12:00:00'),"
+            "('soccer', 1, 'admin', '축구 동아리', '대기', '2026-05-19 12:00:00')"
         );
 
     // C언어에서 MySQL을 다룰 때 꿀팁: 에러 확인 코드 추가
