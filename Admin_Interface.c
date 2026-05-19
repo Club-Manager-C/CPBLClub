@@ -44,9 +44,6 @@ void admin_home_screen(MYSQL *conn) {
     }
 }
 
-int main() {
-    MYSQL *conn;
-    init_db(&conn);
 
     char id[50];
     char pw[50];
@@ -88,4 +85,5 @@ int main() {
     close_db(conn);
     return 0;
 }
+
 
