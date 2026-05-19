@@ -27,7 +27,7 @@ void admin_home_screen(MYSQL *conn) {
                 printf("\n[동아리 등록 기간 설정]\n(준비 중입니다)\n");
                 break;
             case 2:
-                printf("\n[동아리 관리]\n(준비 중입니다)\n");
+                club_manage_menu(conn);
                 break;
             case 3:
                 printf("\n[동아리장 승인]\n(준비 중입니다)\n");
@@ -59,6 +59,16 @@ int main() {
     mysql_query(conn,
         "INSERT INTO club_categories(category_name) "
         "VALUES ('전공'), ('밴드'), ('댄스'), ('봉사'), ('취미'), ('운동')");
+
+    //동아리 승인 대기 목록 생성 (테스트용)
+    mysql_query(conn,
+        "INSERT INTO clubs"
+        "(club_name, status)"
+        "VALUES "
+        "('inherit', '대기'),"
+        "('basketball', '대기'),"
+        "('succer', '대기')"
+    );
 
 
     printf("\n=== 총관리자 프로그램 ===\n");
