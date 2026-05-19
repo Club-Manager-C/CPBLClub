@@ -37,6 +37,10 @@ int login_screen(MYSQL *conn, char *logged_id) {
     printf("PW: ");
     scanf("%s", pw);
 
+    if (strcmp(logged_id, "admin") == 0 && strcmp(pw, "admin1234") == 0) {
+      return 2; // 총관리자 로그인 성공 코드
+    }
+
     if (check_login(conn, logged_id, pw)) {
       printf("성공했습니다.\n");
       return 1;

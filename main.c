@@ -1,9 +1,12 @@
-#include "db.h"
 #include "auth.h"
 #include "board.h"
+#include "db.h"
 #include "mypage.h"
 #include <stdio.h>
 #include <stdlib.h>
+
+
+void run_admin_interface(MYSQL *conn);
 
 // ─────────────────────────────────────────────
 // 동아리장 신청 (스텁)
@@ -33,15 +36,23 @@ void home_screen(MYSQL *conn, const char *logged_id) {
     scanf("%d", &choice);
 
     switch (choice) {
-      case 1: promo_board(conn);           break;
-      case 2: major_club_board(conn);      break;
-      case 3: my_page(conn, logged_id);    break;
-      case 4: apply_club_leader();         break;
-      case 0:
-        printf("로그아웃 합니다.\n");
-        return;
-      default:
-        printf("잘못된 입력입니다.\n");
+    case 1:
+      promo_board(conn);
+      break;
+    case 2:
+      major_club_board(conn);
+      break;
+    case 3:
+      my_page(conn, logged_id);
+      break;
+    case 4:
+      apply_club_leader();
+      break;
+    case 0:
+      printf("로그아웃 합니다.\n");
+      return;
+    default:
+      printf("잘못된 입력입니다.\n");
     }
   }
 }
@@ -60,17 +71,20 @@ int main() {
     printf("\n=== 시작 화면 ===\n");
     printf("1. 로그인\n");
     printf("2. 회원가입\n");
-    printf("3. 종료\n");
+    printf("0. 종료\n");
     printf("입력: ");
     scanf("%d", &choice);
 
     if (choice == 1) {
-      if (login_screen(conn, logged_id)) {
+      int login_status = login_screen(conn, logged_id);
+      if (login_status == 1) {
         home_screen(conn, logged_id);
+      } else if (login_status == 2) {
+        run_admin_interface(conn);
       }
     } else if (choice == 2) {
       register_screen(conn);
-    } else if (choice == 3) {
+    } else if (choice == 0) {
       printf("프로그램을 종료합니다.\n");
       break;
     } else {

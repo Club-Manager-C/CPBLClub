@@ -1,5 +1,6 @@
 #include "db.h"
 #include "category.h"
+#include "clube_manage.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -45,45 +46,32 @@ void admin_home_screen(MYSQL *conn) {
 }
 
 
-    char id[50];
-    char pw[50];
-    
-    // 임의의 총관리자 계정
-    const char *ADMIN_ID = "admin";
-    const char *ADMIN_PW = "admin1234";
-
+void run_admin_interface(MYSQL *conn) {
     //카테고리 목록 초기화
     mysql_query(conn,
-        "INSERT INTO club_categories(category_name) "
+        "INSERT IGNORE INTO club_categories(category_name) "
         "VALUES ('전공'), ('밴드'), ('댄스'), ('봉사'), ('취미'), ('운동')");
 
     //동아리 승인 대기 목록 생성 (테스트용)
-    mysql_query(conn,
-        "INSERT INTO clubs"
-        "(club_name, status)"
-        "VALUES "
-        "('inherit', '대기'),"
-        "('basketball', '대기'),"
-        "('succer', '대기')"
-    );
+// 예시: category_id 1(예: 스포츠, 학술 등)이 이미 생성되어 있다고 가정
+    int res = mysql_query(conn,
+            "INSERT IGNORE INTO clubs "
+            "(club_name, category_id, status) "
+            "VALUES "
+            "('inherit', 1, '대기'),"
+            "('basketball', 1, '대기'),"
+            "('soccer', 1, '대기')"
+        );
 
-
-    printf("\n=== 총관리자 프로그램 ===\n");
-    printf("아이디: ");
-    scanf("%s", id);
-    printf("비밀번호: ");
-    scanf("%s", pw);
-
-    if (strcmp(id, ADMIN_ID) == 0 && strcmp(pw, ADMIN_PW) == 0) {
-        printf("총관리자 로그인 성공!\n");
-        admin_home_screen(conn);
+    // C언어에서 MySQL을 다룰 때 꿀팁: 에러 확인 코드 추가
+    if (res != 0) {
+        printf("더미 데이터 삽입 실패: %s\n", mysql_error(conn));
     } else {
-        printf("아이디 또는 비밀번호가 틀렸습니다.\n");
-    }
-
-    
-    close_db(conn);
-    return 0;
+    printf("더미 데이터 삽입 성공!\n");
 }
+    printf("총관리자 로그인 성공!\n");
+    admin_home_screen(conn);
+}
+
 
 

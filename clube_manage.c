@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <mysql.h>
-#include "club_manage.h"
+#include "clube_manage.h"
 
 void club_manage_menu(MYSQL *conn) {
 
