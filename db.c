@@ -93,6 +93,29 @@ void init_db(MYSQL **conn) {
       "ALTER TABLE posts ADD COLUMN IF NOT EXISTS category_id INT DEFAULT 1");
   mysql_query(*conn, "ALTER TABLE posts ADD FOREIGN KEY (category_id) "
                      "REFERENCES categories(category_id)");
+
+  // 동아리 분류용 카테고리 테이블 생성
+  mysql_query(*conn, "CREATE TABLE IF NOT EXISTS club_categories ("
+                     "category_id INT AUTO_INCREMENT PRIMARY KEY, "
+                     "category_name VARCHAR(50) NOT NULL)");
+  mysql_query(*conn, "INSERT IGNORE INTO club_categories (category_id, category_name) VALUES "
+                     "(1, '전공'), (2, '밴드'), (3, '댄스'), (4, '봉사'), (5, '취미'), (6, '운동')");
+
+  // 동아리 테이블 생성
+  const char *create_clubs = "CREATE TABLE IF NOT EXISTS clubs ("
+                             "club_id INT AUTO_INCREMENT PRIMARY KEY, "
+                             "club_name VARCHAR(100) NOT NULL, "
+                             "leader_id VARCHAR(50) NOT NULL, "
+                             "category_id INT NOT NULL, "
+                             "purpose VARCHAR(300) NOT NULL, "
+                             "status VARCHAR(20) DEFAULT '대기', "
+                             "reject_reason VARCHAR(255) DEFAULT NULL, "
+                             "apply_date VARCHAR(50), "
+                             "FOREIGN KEY (leader_id) REFERENCES users(id), "
+                             "FOREIGN KEY (category_id) REFERENCES club_categories(category_id))";
+  if (mysql_query(*conn, create_clubs)) {
+    fprintf(stderr, "테이블 생성 실패(clubs): %s\n", mysql_error(*conn));
+  }
 }
 
 int check_login(MYSQL *conn, const char *id, const char *pw) {
