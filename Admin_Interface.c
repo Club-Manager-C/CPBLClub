@@ -42,31 +42,5 @@ void admin_home_screen(MYSQL *conn) {
     }
 }
 
-int main() {
-    MYSQL *conn;
-    init_db(&conn);
 
-    char id[50];
-    char pw[50];
-    
-    // 임의의 총관리자 계정
-    const char *ADMIN_ID = "admin";
-    const char *ADMIN_PW = "admin1234";
-
-    printf("\n=== 총관리자 프로그램 ===\n");
-    printf("아이디: ");
-    scanf("%s", id);
-    printf("비밀번호: ");
-    scanf("%s", pw);
-
-    if (strcmp(id, ADMIN_ID) == 0 && strcmp(pw, ADMIN_PW) == 0) {
-        printf("총관리자 로그인 성공!\n");
-        admin_home_screen(conn);
-    } else {
-        printf("아이디 또는 비밀번호가 틀렸습니다.\n");
-    }
-
-    close_db(conn);
-    return 0;
-}
 
