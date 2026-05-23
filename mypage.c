@@ -100,16 +100,16 @@ static void my_schedule_menu(MYSQL *conn, const char *logged_id) {
   }
 }
 
-void viewMyMessages(MYSQL *conn, int user_idx) {
+void viewMyMessages(MYSQL *conn, const char *logged_id) {
   printf("\n=== 📬 메시지함 ===\n");
   
   char query[512];
   sprintf(query, 
-      "SELECT message_id, content, is_read, sent_at "
+      "SELECT message_id, content, is_read, created_at "
       "FROM messages "
-      "WHERE receiver_idx = %d "
-      "ORDER BY sent_at DESC", 
-      user_idx
+      "WHERE user_id = '%s' "
+      "ORDER BY created_at DESC", 
+      logged_id
   );
   
   if (mysql_query(conn, query)) {
@@ -142,7 +142,7 @@ void viewMyMessages(MYSQL *conn, int user_idx) {
   mysql_free_result(res);
   
   // 조회 완료 시 읽음 상태로 일괄 업데이트
-  sprintf(query, "UPDATE messages SET is_read = 1 WHERE receiver_idx = %d AND is_read = 0", user_idx);
+  sprintf(query, "UPDATE messages SET is_read = 1 WHERE user_id = '%s' AND is_read = 0", logged_id);
   if (mysql_query(conn, query)) {
       fprintf(stderr, "읽음 상태 업데이트 실패: %s\n", mysql_error(conn));
   } else {
@@ -176,12 +176,7 @@ void my_page(MYSQL *conn, const char *logged_id) {
       case 1: my_posts_menu(conn, logged_id);    break;
       case 2: my_comments_menu(conn, logged_id); break;
       case 3: {
-        int user_idx = get_user_idx_by_id(conn, logged_id);
-        if (user_idx == -1) {
-          printf("오류: 유저 정보를 찾을 수 없습니다.\n");
-        } else {
-          viewMyMessages(conn, user_idx);
-        }
+        viewMyMessages(conn, logged_id);
         break;
       }
       case 4: my_schedule_menu(conn, logged_id); break;

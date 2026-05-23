@@ -13,7 +13,7 @@ int register_user(MYSQL *conn, const char *id, const char *pw,
                   const char *nickname, long long student_id, const char *name,
                   const char *major, const char *phone);
 void close_db(MYSQL *conn);
-int insert_message(MYSQL *conn, int receiver_idx, const char *content);
+int insert_message(MYSQL *conn, const char *user_id, const char *content);
 int get_user_idx_by_id(MYSQL *conn, const char *user_id);
 
 // ── 게시글 ──────────────────────────────────────

@@ -92,7 +92,9 @@ void init_db(MYSQL **conn) {
                      "club_name VARCHAR(100) NOT NULL, "
                      "leader_id VARCHAR(50) NOT NULL, "
                      "category_id INT NOT NULL, "
-                     "purpose VARCHAR(300) NOT NULL, "
+                     "description VARCHAR(300) NOT NULL, "
+                     "professor_name VARCHAR(50) NULL, "
+                     "operating_hours VARCHAR(100) NULL, "
                      "status VARCHAR(20) DEFAULT '대기', "
                      "reject_reason VARCHAR(255) DEFAULT NULL, "
                      "apply_date VARCHAR(50), "
@@ -391,9 +393,9 @@ void close_db(MYSQL *conn) {
   }
 }
 
-int insert_message(MYSQL *conn, int receiver_idx, const char *content) {
+int insert_message(MYSQL *conn, const char *user_id, const char *content) {
   char query[1024];
-  sprintf(query, "INSERT INTO messages (receiver_idx, content) VALUES (%d, '%s')", receiver_idx, content);
+  sprintf(query, "INSERT INTO messages (user_id, content) VALUES ('%s', '%s')", user_id, content);
   if (mysql_query(conn, query)) {
     fprintf(stderr, "알림 등록 실패: %s\n", mysql_error(conn));
     return 0;
@@ -405,6 +407,7 @@ int get_user_idx_by_id(MYSQL *conn, const char *user_id) {
   char query[256];
   sprintf(query, "SELECT user_idx FROM users WHERE user_id = '%s'", user_id);
   if (mysql_query(conn, query)) {
+    fprintf(stderr, "user_idx 조회 실패: %s\n", mysql_error(conn));
     return -1;
   }
   MYSQL_RES *res = mysql_store_result(conn);
