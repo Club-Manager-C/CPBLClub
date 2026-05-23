@@ -6,7 +6,7 @@
 
 const char *DB_HOST = "localhost";
 const char *DB_USER = "root";
-const char *DB_PW = "kim7479050810#";
+const char *DB_PW = "rds12003!";
 const char *DB_NAME = "cpbl_db";
 
 void init_db(MYSQL **conn) {
