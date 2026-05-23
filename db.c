@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 
 const char *DB_HOST = "localhost";
 const char *DB_USER = "root";
@@ -15,107 +16,98 @@ void init_db(MYSQL **conn) {
     exit(1);
   }
 
-  // DB 서버 접속
+  // DB 서버 접속 전 SSL 옵션 끄기 (수정된 코드)
+  bool my_ssl = false;
+  mysql_options(*conn, MYSQL_OPT_SSL_MODE, &my_ssl);
 
-  if (mysql_real_connect(*conn, DB_HOST, DB_USER, DB_PW, NULL, 3306, NULL, 0) ==
-      NULL) {
+  if (mysql_real_connect(*conn, DB_HOST, DB_USER, DB_PW, NULL, 3306, NULL, 0) == NULL) {
     fprintf(stderr, "MySQL 연결 실패: %s\n", mysql_error(*conn));
     exit(1);
   }
 
-  // 사용할 데이터베이스 생성 및 선택
+  // 한글 깨짐 방지: 클라이언트 연결 인코딩을 utf8로 설정
+  mysql_set_character_set(*conn, "utf8");
+
   mysql_query(*conn, "CREATE DATABASE IF NOT EXISTS cpbl_db");
   mysql_select_db(*conn, DB_NAME);
 
-  // 사용자 테이블 생성
-  const char *create_table_query = "CREATE TABLE IF NOT EXISTS users ("
-                                   "id VARCHAR(50) PRIMARY KEY, "
-                                   "pw VARCHAR(50) NOT NULL, "
-                                   "nickname VARCHAR(50) NOT NULL, "
-                                   "student_id BIGINT UNIQUE NOT NULL, "
-                                   "name VARCHAR(50) NOT NULL, "
-                                   "major VARCHAR(50) NOT NULL, "
-                                   "phone VARCHAR(20) NOT NULL)";
-  if (mysql_query(*conn, create_table_query)) {
-    fprintf(stderr, "테이블 생성 실패(users): %s\n", mysql_error(*conn));
-  }
+  // 1. 사용자 테이블
+  mysql_query(*conn, "CREATE TABLE IF NOT EXISTS users ("
+                     "id VARCHAR(50) PRIMARY KEY, "
+                     "pw VARCHAR(50) NOT NULL, "
+                     "nickname VARCHAR(50) NOT NULL, "
+                     "student_id BIGINT UNIQUE NOT NULL, "
+                     "name VARCHAR(50) NOT NULL, "
+                     "major VARCHAR(50) NOT NULL, "
+                     "phone VARCHAR(20) NOT NULL)");
 
-  // 게시글 테이블
-  const char *create_posts = "CREATE TABLE IF NOT EXISTS posts ("
-                             "post_id INT AUTO_INCREMENT PRIMARY KEY, "
-                             "user_id VARCHAR(50) NOT NULL, "
-                             "title VARCHAR(200) NOT NULL, "
-                             "content TEXT NOT NULL, "
-                             "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
-                             "FOREIGN KEY (user_id) REFERENCES users(id))";
-  if (mysql_query(*conn, create_posts)) {
-    fprintf(stderr, "테이블 생성 실패(posts): %s\n", mysql_error(*conn));
-  }
-
-  // 댓글 테이블
-  const char *create_comments =
-      "CREATE TABLE IF NOT EXISTS comments ("
-      "comment_id INT AUTO_INCREMENT PRIMARY KEY, "
-      "post_id INT NOT NULL, "
-      "user_id VARCHAR(50) NOT NULL, "
-      "content TEXT NOT NULL, "
-      "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
-      "FOREIGN KEY (user_id) REFERENCES users(id), "
-      "FOREIGN KEY (post_id) REFERENCES posts(post_id))";
-  if (mysql_query(*conn, create_comments)) {
-    fprintf(stderr, "테이블 생성 실패(comments): %s\n", mysql_error(*conn));
-  }
-
-  // 시간표 테이블
-  const char *create_schedules = "CREATE TABLE IF NOT EXISTS schedules ("
-                                 "schedule_id INT AUTO_INCREMENT PRIMARY KEY, "
-                                 "user_id VARCHAR(50) NOT NULL, "
-                                 "day_of_week VARCHAR(10) NOT NULL, "
-                                 "start_time VARCHAR(10) NOT NULL, "
-                                 "end_time VARCHAR(10) NOT NULL, "
-                                 "subject VARCHAR(100) NOT NULL, "
-                                 "location VARCHAR(100) NOT NULL, "
-                                 "FOREIGN KEY (user_id) REFERENCES users(id))";
-  if (mysql_query(*conn, create_schedules)) {
-    fprintf(stderr, "테이블 생성 실패(schedules): %s\n", mysql_error(*conn));
-  }
-
-  // 카테고리 테이블 생성 및 초기화
+  // 2. 카테고리 테이블 (posts보다 먼저 생성해야 외래키 연결 가능)
   mysql_query(*conn, "CREATE TABLE IF NOT EXISTS categories ("
                      "category_id INT PRIMARY KEY, "
                      "name VARCHAR(50) NOT NULL)");
-  mysql_query(*conn, "INSERT IGNORE INTO categories (category_id, name) VALUES "
-                     "(1, '동아리 홍보'), (2, '전공 동아리')");
+  mysql_query(*conn, "INSERT IGNORE INTO categories (category_id, name) VALUES (1, '동아리 홍보'), (2, '전공 동아리')");
 
-  // posts 테이블에 category_id 컬럼 추가 (없을 경우)
-  mysql_query(
-      *conn,
-      "ALTER TABLE posts ADD COLUMN IF NOT EXISTS category_id INT DEFAULT 1");
-  mysql_query(*conn, "ALTER TABLE posts ADD FOREIGN KEY (category_id) "
-                     "REFERENCES categories(category_id)");
+  // 3. 게시글 테이블 (처음부터 category_id 포함)
+  mysql_query(*conn, "CREATE TABLE IF NOT EXISTS posts ("
+                     "post_id INT AUTO_INCREMENT PRIMARY KEY, "
+                     "user_id VARCHAR(50) NOT NULL, "
+                     "category_id INT DEFAULT 1, "
+                     "title VARCHAR(200) NOT NULL, "
+                     "content TEXT NOT NULL, "
+                     "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                     "FOREIGN KEY (user_id) REFERENCES users(id), "
+                     "FOREIGN KEY (category_id) REFERENCES categories(category_id))");
 
-  // 동아리 분류용 카테고리 테이블 생성
+  // 4. 댓글 테이블
+  mysql_query(*conn, "CREATE TABLE IF NOT EXISTS comments ("
+                     "comment_id INT AUTO_INCREMENT PRIMARY KEY, "
+                     "post_id INT NOT NULL, "
+                     "user_id VARCHAR(50) NOT NULL, "
+                     "content TEXT NOT NULL, "
+                     "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                     "FOREIGN KEY (user_id) REFERENCES users(id), "
+                     "FOREIGN KEY (post_id) REFERENCES posts(post_id))");
+
+  // 5. 시간표 테이블
+  mysql_query(*conn, "CREATE TABLE IF NOT EXISTS schedules ("
+                     "schedule_id INT AUTO_INCREMENT PRIMARY KEY, "
+                     "user_id VARCHAR(50) NOT NULL, "
+                     "day_of_week VARCHAR(10) NOT NULL, "
+                     "start_time VARCHAR(10) NOT NULL, "
+                     "end_time VARCHAR(10) NOT NULL, "
+                     "subject VARCHAR(100) NOT NULL, "
+                     "location VARCHAR(100) NOT NULL, "
+                     "FOREIGN KEY (user_id) REFERENCES users(id))");
+
+  // 6. 동아리 분류 카테고리
   mysql_query(*conn, "CREATE TABLE IF NOT EXISTS club_categories ("
                      "category_id INT AUTO_INCREMENT PRIMARY KEY, "
                      "category_name VARCHAR(50) NOT NULL)");
   mysql_query(*conn, "INSERT IGNORE INTO club_categories (category_id, category_name) VALUES "
                      "(1, '전공'), (2, '밴드'), (3, '댄스'), (4, '봉사'), (5, '취미'), (6, '운동')");
 
-  // 동아리 테이블 생성
-  const char *create_clubs = "CREATE TABLE IF NOT EXISTS clubs ("
-                             "club_id INT AUTO_INCREMENT PRIMARY KEY, "
-                             "club_name VARCHAR(100) NOT NULL, "
-                             "leader_id VARCHAR(50) NOT NULL, "
-                             "category_id INT NOT NULL, "
-                             "purpose VARCHAR(300) NOT NULL, "
-                             "status VARCHAR(20) DEFAULT '대기', "
-                             "reject_reason VARCHAR(255) DEFAULT NULL, "
-                             "apply_date VARCHAR(50), "
-                             "FOREIGN KEY (leader_id) REFERENCES users(id), "
-                             "FOREIGN KEY (category_id) REFERENCES club_categories(category_id))";
-  if (mysql_query(*conn, create_clubs)) {
-    fprintf(stderr, "테이블 생성 실패(clubs): %s\n", mysql_error(*conn));
-  }
+  // 7. 동아리 테이블
+  mysql_query(*conn, "CREATE TABLE IF NOT EXISTS clubs ("
+                     "club_id INT AUTO_INCREMENT PRIMARY KEY, "
+                     "club_name VARCHAR(100) NOT NULL, "
+                     "leader_id VARCHAR(50) NOT NULL, "
+                     "category_id INT NOT NULL, "
+                     "description VARCHAR(300) NOT NULL, "
+                     "professor_name VARCHAR(50) NULL, "
+                     "operating_hours VARCHAR(100) NULL, "
+                     "status VARCHAR(20) DEFAULT '대기', "
+                     "reject_reason VARCHAR(255) DEFAULT NULL, "
+                     "apply_date VARCHAR(50), "
+                     "FOREIGN KEY (leader_id) REFERENCES users(id), "
+                     "FOREIGN KEY (category_id) REFERENCES club_categories(category_id))");
+
+  // 8. 알림 메시지 테이블
+  mysql_query(*conn, "CREATE TABLE IF NOT EXISTS messages ("
+                     "message_id INT AUTO_INCREMENT PRIMARY KEY, "
+                     "user_id VARCHAR(50) NOT NULL, "
+                     "content TEXT NOT NULL, "
+                     "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                     "FOREIGN KEY (user_id) REFERENCES users(id))");
 }
 
 int check_login(MYSQL *conn, const char *id, const char *pw) {
@@ -399,4 +391,32 @@ void close_db(MYSQL *conn) {
   if (conn) {
     mysql_close(conn);
   }
+}
+
+int insert_message(MYSQL *conn, const char *user_id, const char *content) {
+  char query[1024];
+  sprintf(query, "INSERT INTO messages (user_id, content) VALUES ('%s', '%s')", user_id, content);
+  if (mysql_query(conn, query)) {
+    fprintf(stderr, "알림 등록 실패: %s\n", mysql_error(conn));
+    return 0;
+  }
+  return 1;
+}
+
+int get_user_idx_by_id(MYSQL *conn, const char *user_id) {
+  char query[256];
+  sprintf(query, "SELECT user_idx FROM users WHERE user_id = '%s'", user_id);
+  if (mysql_query(conn, query)) {
+    fprintf(stderr, "user_idx 조회 실패: %s\n", mysql_error(conn));
+    return -1;
+  }
+  MYSQL_RES *res = mysql_store_result(conn);
+  if (res == NULL || mysql_num_rows(res) == 0) {
+    if (res) mysql_free_result(res);
+    return -1;
+  }
+  MYSQL_ROW row = mysql_fetch_row(res);
+  int idx = atoi(row[0]);
+  mysql_free_result(res);
+  return idx;
 }

@@ -18,10 +18,12 @@ void apply_club_leader(MYSQL *conn, const char *logged_id) {
 
   char club_name[100];
   int category_id;
-  char purpose[300];
+  char description[300];
+  char professor_name[50];
+  char operating_hours[100];
 
   printf("동아리 이름: ");
-  scanf("%s", club_name);
+  scanf("%99s", club_name);
 
   // 카테고리 로딩
   printf("\n[카테고리 목록]\n");
@@ -40,31 +42,40 @@ void apply_club_leader(MYSQL *conn, const char *logged_id) {
   printf("카테고리 번호 선택: ");
   scanf("%d", &category_id);
 
-  printf("동아리의 목적 (300자 이내): ");
-  getchar(); // 버퍼 비우기 (개행 문자 제거)
-  fgets(purpose, sizeof(purpose), stdin);
-  purpose[strcspn(purpose, "\n")] = 0; // 끝에 붙은 개행 문자 제거
+  printf("지도 교수님 이름: ");
+  scanf("%49s", professor_name);
 
-  // 신청 일자 생성 (<time.h> 사용)
-  time_t now = time(NULL);
-  struct tm *t = localtime(&now);
-  char apply_date[50];
-  strftime(apply_date, sizeof(apply_date), "%Y-%m-%d %H:%M:%S", t);
+  printf("활동 시간대 (예: 매주 목요일 18:00): ");
+  while (getchar() != '\n'); // 버퍼 비우기
+  fgets(operating_hours, sizeof(operating_hours), stdin);
+  operating_hours[strcspn(operating_hours, "\n")] = 0; // 개행 제거
+
+  printf("동아리의 목적 및 설명 (300자 이내): ");
+  fgets(description, sizeof(description), stdin);
+  description[strcspn(description, "\n")] = 0; // 개행 제거
+
+  // 문자열 SQL 인젝션 방지를 위한 안전한 이스케이프
+  char esc_club_name[200], esc_prof[100], esc_hours[200], esc_desc[600], esc_logged_id[100];
+  mysql_real_escape_string(conn, esc_club_name, club_name, strlen(club_name));
+  mysql_real_escape_string(conn, esc_prof, professor_name, strlen(professor_name));
+  mysql_real_escape_string(conn, esc_hours, operating_hours, strlen(operating_hours));
+  mysql_real_escape_string(conn, esc_desc, description, strlen(description));
+  mysql_real_escape_string(conn, esc_logged_id, logged_id, strlen(logged_id));
 
   // DB에 삽입 (status는 기본값 '대기'로 저장)
-  char query[1024];
+  char query[2048];
   sprintf(query,
-          "INSERT INTO clubs (club_name, leader_id, category_id, purpose, "
-          "status, apply_date) "
-          "VALUES ('%s', '%s', %d, '%s', '대기', '%s')",
-          club_name, logged_id, category_id, purpose, apply_date);
+          "INSERT INTO clubs (club_name, category_id, description, professor_name, "
+          "operating_hours, leader_id, status) "
+          "VALUES ('%s', %d, '%s', '%s', '%s', '%s', '대기')",
+          esc_club_name, category_id, esc_desc, esc_prof, esc_hours, esc_logged_id);
 
   if (mysql_query(conn, query)) {
     printf("신청에 실패했습니다: %s\n", mysql_error(conn));
   } else {
     printf("\n동아리장 및 동아리 신청이 성공적으로 접수되었습니다!\n");
-    printf("- 리더 ID: %s (자동 기입됨)\n", logged_id);
-    printf("- 신청 일자: %s\n", apply_date);
+    printf("- 신청 동아리명: %s\n", club_name);
+    printf("- 지도 교수님: %s\n", professor_name);
     printf("- 승인 상태: 대기중 (관리자 승인 대기)\n");
   }
 }

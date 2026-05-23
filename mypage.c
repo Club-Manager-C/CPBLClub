@@ -100,6 +100,60 @@ static void my_schedule_menu(MYSQL *conn, const char *logged_id) {
   }
 }
 
+void viewMyMessages(MYSQL *conn, const char *logged_id) {
+  printf("\n=== 📬 메시지함 ===\n");
+  
+  char query[512];
+  sprintf(query, 
+      "SELECT message_id, content, is_read, created_at "
+      "FROM messages "
+      "WHERE user_id = '%s' "
+      "ORDER BY created_at DESC", 
+      logged_id
+  );
+  
+  if (mysql_query(conn, query)) {
+      fprintf(stderr, "메시지 로딩 실패: %s\n", mysql_error(conn));
+      return;
+  }
+  
+  MYSQL_RES *res = mysql_store_result(conn);
+  if (res == NULL) {
+      fprintf(stderr, "결과셋 로딩 실패\n");
+      return;
+  }
+  
+  int count = mysql_num_rows(res);
+  if (count == 0) {
+      printf("메시지함이 비어 있습니다.\n");
+      mysql_free_result(res);
+      return;
+  }
+  
+  printf("%-8s %-50s %-10s %-20s\n", "메시지ID", "내용", "읽음상태", "수신일시");
+  printf("----------------------------------------------------------------------------------------\n");
+  
+  MYSQL_ROW row;
+  while ((row = mysql_fetch_row(res))) {
+      const char *is_read_str = (atoi(row[2]) == 1) ? "읽음" : "안읽음";
+      printf("%-8s %-50s %-10s %-20s\n", 
+             row[0], row[1], is_read_str, row[3]);
+  }
+  mysql_free_result(res);
+  
+  // 조회 완료 시 읽음 상태로 일괄 업데이트
+  sprintf(query, "UPDATE messages SET is_read = 1 WHERE user_id = '%s' AND is_read = 0", logged_id);
+  if (mysql_query(conn, query)) {
+      fprintf(stderr, "읽음 상태 업데이트 실패: %s\n", mysql_error(conn));
+  } else {
+      printf("\n✅ 모든 새로운 메시지를 읽음 상태로 표시했습니다.\n");
+  }
+  
+  printf("\n아무 키나 누르고 Enter를 입력하면 마이페이지로 돌아갑니다: ");
+  char dummy[50];
+  scanf("%49s", dummy);
+}
+
 // ─────────────────────────────────────────────
 // 마이페이지 메인
 // ─────────────────────────────────────────────
@@ -111,7 +165,8 @@ void my_page(MYSQL *conn, const char *logged_id) {
     printf("============================\n");
     printf("1. 내 게시글 확인/수정\n");
     printf("2. 내 댓글 확인/수정\n");
-    printf("3. 시간표 확인/수정\n");
+    printf("3. 메시지함\n");
+    printf("4. 시간표 확인/수정\n");
     printf("0. 뒤로\n");
     printf("============================\n");
     printf("입력: ");
@@ -120,7 +175,11 @@ void my_page(MYSQL *conn, const char *logged_id) {
     switch (choice) {
       case 1: my_posts_menu(conn, logged_id);    break;
       case 2: my_comments_menu(conn, logged_id); break;
-      case 3: my_schedule_menu(conn, logged_id); break;
+      case 3: {
+        viewMyMessages(conn, logged_id);
+        break;
+      }
+      case 4: my_schedule_menu(conn, logged_id); break;
       case 0: return;
       default: printf("잘못된 입력입니다.\n");
     }
