@@ -5,5 +5,6 @@
 
 // 마이페이지 메인 메뉴
 void my_page(MYSQL *conn, const char *logged_id);
+void viewMyMessages(MYSQL *conn, int user_idx);
 
 #endif // MYPAGE_H

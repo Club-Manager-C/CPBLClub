@@ -98,6 +98,14 @@ void init_db(MYSQL **conn) {
                      "apply_date VARCHAR(50), "
                      "FOREIGN KEY (leader_id) REFERENCES users(id), "
                      "FOREIGN KEY (category_id) REFERENCES club_categories(category_id))");
+
+  // 8. 알림 메시지 테이블
+  mysql_query(*conn, "CREATE TABLE IF NOT EXISTS messages ("
+                     "message_id INT AUTO_INCREMENT PRIMARY KEY, "
+                     "user_id VARCHAR(50) NOT NULL, "
+                     "content TEXT NOT NULL, "
+                     "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                     "FOREIGN KEY (user_id) REFERENCES users(id))");
 }
 
 int check_login(MYSQL *conn, const char *id, const char *pw) {
@@ -381,4 +389,31 @@ void close_db(MYSQL *conn) {
   if (conn) {
     mysql_close(conn);
   }
+}
+
+int insert_message(MYSQL *conn, int receiver_idx, const char *content) {
+  char query[1024];
+  sprintf(query, "INSERT INTO messages (receiver_idx, content) VALUES (%d, '%s')", receiver_idx, content);
+  if (mysql_query(conn, query)) {
+    fprintf(stderr, "알림 등록 실패: %s\n", mysql_error(conn));
+    return 0;
+  }
+  return 1;
+}
+
+int get_user_idx_by_id(MYSQL *conn, const char *user_id) {
+  char query[256];
+  sprintf(query, "SELECT user_idx FROM users WHERE user_id = '%s'", user_id);
+  if (mysql_query(conn, query)) {
+    return -1;
+  }
+  MYSQL_RES *res = mysql_store_result(conn);
+  if (res == NULL || mysql_num_rows(res) == 0) {
+    if (res) mysql_free_result(res);
+    return -1;
+  }
+  MYSQL_ROW row = mysql_fetch_row(res);
+  int idx = atoi(row[0]);
+  mysql_free_result(res);
+  return idx;
 }

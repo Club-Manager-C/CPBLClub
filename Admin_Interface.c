@@ -6,6 +6,143 @@
 #include <stdlib.h>
 #include <string.h>
 
+void manageClubRequests(MYSQL *conn) {
+    char query[1024];
+    
+    while (1) {
+        printf("\n==================================================\n");
+        printf("  동아리 개설 및 동아리장 승인 대기 목록\n");
+        printf("==================================================\n");
+        
+        // clubs 테이블과 users 테이블을 leader_idx로 JOIN하여 대기 중인 목록 조회
+        sprintf(query, 
+            "SELECT c.club_id, c.club_name, c.professor_name, c.leader_idx, "
+            "u.name, u.student_id, c.created_at "
+            "FROM clubs c "
+            "JOIN users u ON c.leader_idx = u.user_idx "
+            "WHERE c.status = '대기' "
+            "ORDER BY c.created_at ASC"
+        );
+        
+        if (mysql_query(conn, query)) {
+            fprintf(stderr, "대기 목록 조회 실패: %s\n", mysql_error(conn));
+            return;
+        }
+        
+        MYSQL_RES *res = mysql_store_result(conn);
+        if (res == NULL) {
+            fprintf(stderr, "결과셋 로드 실패: %s\n", mysql_error(conn));
+            return;
+        }
+        
+        int row_count = mysql_num_rows(res);
+        if (row_count == 0) {
+            printf("현재 대기 중인 동아리 신청 요청이 없습니다.\n");
+            mysql_free_result(res);
+            return;
+        }
+        
+        printf("%-8s %-20s %-15s %-15s %-20s\n", "신청ID", "동아리명", "신청자명", "학번", "신청일시");
+        printf("--------------------------------------------------------------------------------\n");
+        
+        MYSQL_ROW row;
+        while ((row = mysql_fetch_row(res))) {
+            printf("%-8s %-20s %-15s %-15s %-20s\n", 
+                   row[0], row[1], row[4], row[5], row[6]);
+        }
+        
+        mysql_free_result(res);
+        
+        int target_club_id;
+        printf("\n승인/거절 처리할 신청 ID (club_id) 입력 (0. 뒤로가기): ");
+        if (scanf("%d", &target_club_id) != 1) {
+            while (getchar() != '\n');
+            printf("잘못된 숫자 입력입니다.\n");
+            continue;
+        }
+        if (target_club_id == 0) return;
+        
+        // 입력한 club_id가 실제로 존재하는지 대기 상태인지 검증
+        sprintf(query, "SELECT club_name, leader_idx FROM clubs WHERE club_id = %d AND status = '대기'", target_club_id);
+        if (mysql_query(conn, query)) {
+            fprintf(stderr, "검증 쿼리 실패: %s\n", mysql_error(conn));
+            continue;
+        }
+        MYSQL_RES *check_res = mysql_store_result(conn);
+        if (check_res == NULL || mysql_num_rows(check_res) == 0) {
+            printf("대기 중인 해당 신청 ID가 존재하지 않습니다.\n");
+            if (check_res) mysql_free_result(check_res);
+            continue;
+        }
+        MYSQL_ROW check_row = mysql_fetch_row(check_res);
+        char club_name[100];
+        strcpy(club_name, check_row[0]);
+        int leader_idx = atoi(check_row[1]);
+        mysql_free_result(check_res);
+        
+        int approval_choice;
+        printf("\n선택하신 동아리: %s (신청자 번호: %d)\n", club_name, leader_idx);
+        printf("1. 승인  2. 거절  0. 취소\n입력: ");
+        if (scanf("%d", &approval_choice) != 1) {
+            while (getchar() != '\n');
+            printf("잘못된 입력입니다.\n");
+            continue;
+        }
+        
+        if (approval_choice == 1) {
+            // [승인 시 처리 로직]
+            sprintf(query, "UPDATE clubs SET status = '승인' WHERE club_id = %d", target_club_id);
+            if (mysql_query(conn, query)) {
+                fprintf(stderr, "동아리 승인 업데이트 실패: %s\n", mysql_error(conn));
+                continue;
+            }
+            
+            sprintf(query, "UPDATE users SET is_club_leader = 1 WHERE user_idx = %d", leader_idx);
+            if (mysql_query(conn, query)) {
+                fprintf(stderr, "유저 권한 업데이트 실패: %s\n", mysql_error(conn));
+                continue;
+            }
+            
+            sprintf(query, "INSERT IGNORE INTO clubmembers (club_id, user_idx, role) VALUES (%d, %d, 'Leader')", target_club_id, leader_idx);
+            if (mysql_query(conn, query)) {
+                fprintf(stderr, "동아리 멤버 등록 실패: %s\n", mysql_error(conn));
+                continue;
+            }
+            
+            char msg_content[500];
+            sprintf(msg_content, "축하합니다! [%s] 등록 신청이 승인되었습니다.", club_name);
+            insert_message(conn, leader_idx, msg_content);
+            
+            printf("✅ [%s] 동아리 신청이 최종 '승인'되었습니다!\n", club_name);
+            
+        } else if (approval_choice == 2) {
+            // [거절 시 처리 로직]
+            char reject_reason[256];
+            printf("거절 사유 입력 (최대 250자): ");
+            while (getchar() != '\n'); // 버퍼 비우기
+            fgets(reject_reason, sizeof(reject_reason), stdin);
+            reject_reason[strcspn(reject_reason, "\n")] = '\0';
+            
+            char escaped_reason[512];
+            mysql_real_escape_string(conn, escaped_reason, reject_reason, strlen(reject_reason));
+            
+            sprintf(query, "UPDATE clubs SET status = '거절', reject_reason = '%s' WHERE club_id = %d", escaped_reason, target_club_id);
+            if (mysql_query(conn, query)) {
+                fprintf(stderr, "동아리 거절 업데이트 실패: %s\n", mysql_error(conn));
+                continue;
+            }
+            
+            char msg_content[500];
+            sprintf(msg_content, "[%s] 등록 신청이 거절되었습니다. 사유: %s", club_name, reject_reason);
+            insert_message(conn, leader_idx, msg_content);
+            
+            printf("❌ [%s] 동아리 신청이 '거절'되었습니다.\n", club_name);
+        } else {
+            printf("취소되었습니다.\n");
+        }
+    }
+}
+
 // 관리자 메인 메뉴
 void admin_home_screen(MYSQL *conn) {
     int choice;
@@ -31,7 +168,7 @@ void admin_home_screen(MYSQL *conn) {
                 club_manage_menu(conn);
                 break;
             case 3:
-                printf("\n[동아리장 승인]\n(준비 중입니다)\n");
+                manageClubRequests(conn);
                 break;
             case 4:
                 category_menu(conn);
@@ -47,25 +184,6 @@ void admin_home_screen(MYSQL *conn) {
 
 
 void run_admin_interface(MYSQL *conn) {
-    // 카테고리는 db.c의 init_db에서 초기화되므로 생략합니다.
-
-    //동아리 승인 대기 목록 생성 (테스트용)
-// 예시: category_id 1(예: 스포츠, 학술 등)이 이미 생성되어 있다고 가정
-    int res = mysql_query(conn,
-            "INSERT IGNORE INTO clubs "
-            "(club_name, category_id, leader_id, purpose, status, apply_date) "
-            "VALUES "
-            "('inherit', 1, 'admin', '테스트 목적', '대기', '2026-05-19 12:00:00'),"
-            "('basketball', 1, 'admin', '농구 동아리', '대기', '2026-05-19 12:00:00'),"
-            "('soccer', 1, 'admin', '축구 동아리', '대기', '2026-05-19 12:00:00')"
-        );
-
-    // C언어에서 MySQL을 다룰 때 꿀팁: 에러 확인 코드 추가
-    if (res != 0) {
-        printf("더미 데이터 삽입 실패: %s\n", mysql_error(conn));
-    } else {
-    printf("더미 데이터 삽입 성공!\n");
-}
     printf("총관리자 로그인 성공!\n");
     admin_home_screen(conn);
 }
