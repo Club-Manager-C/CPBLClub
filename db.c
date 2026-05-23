@@ -106,8 +106,9 @@ void init_db(MYSQL **conn) {
                      "message_id INT AUTO_INCREMENT PRIMARY KEY, "
                      "user_id VARCHAR(50) NOT NULL, "
                      "content TEXT NOT NULL, "
+                     "is_read TINYINT(1) DEFAULT 0, "
                      "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
-                     "FOREIGN KEY (user_id) REFERENCES users(id))");
+                     "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE)");
 }
 
 int check_login(MYSQL *conn, const char *id, const char *pw) {

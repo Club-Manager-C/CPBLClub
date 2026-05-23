@@ -44,9 +44,9 @@ void apply_club_leader(MYSQL *conn, const char *logged_id) {
 
   printf("지도 교수님 이름: ");
   scanf("%49s", professor_name);
+  while (getchar() != '\n'); // scanf 직후 입력 버퍼 즉시 비우기 (중요!)
 
   printf("활동 시간대 (예: 매주 목요일 18:00): ");
-  while (getchar() != '\n'); // 버퍼 비우기
   fgets(operating_hours, sizeof(operating_hours), stdin);
   operating_hours[strcspn(operating_hours, "\n")] = 0; // 개행 제거
 
