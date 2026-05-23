@@ -2,6 +2,37 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <conio.h>
+
+// ─────────────────────────────────────────────
+// 비밀번호 별표 마스킹 입력 헬퍼 함수
+// ─────────────────────────────────────────────
+void get_masked_password(char *pw, int max_len) {
+  int i = 0;
+  int ch;
+  while (1) {
+    ch = _getch();
+    if (ch == '\r' || ch == '\n') { // 엔터키 입력
+      break;
+    } else if (ch == '\b') { // 백스페이스키 입력
+      if (i > 0) {
+        i--;
+        printf("\b \b");
+        fflush(stdout);
+      }
+    } else if (ch == 0 || ch == 224) {
+      // 방향키/기능키 예외 처리 (Windows의 2바이트 키 이벤트 소비)
+      _getch();
+    } else if (i < max_len - 1 && ch >= 32 && ch <= 126) {
+      // 출력 가능한 문자만 비밀번호로 입력 허용
+      pw[i++] = (char)ch;
+      printf("*");
+      fflush(stdout);
+    }
+  }
+  pw[i] = '\0';
+  printf("\n");
+}
 
 // ─────────────────────────────────────────────
 // 비밀번호 형식 검사
@@ -35,7 +66,7 @@ int login_screen(MYSQL *conn, char *logged_id) {
     printf("\n아이디: ");
     scanf("%s", logged_id);
     printf("PW: ");
-    scanf("%s", pw);
+    get_masked_password(pw, sizeof(pw));
 
     if (strcmp(logged_id, "admin") == 0 && strcmp(pw, "admin1234") == 0) {
       return 2; // 총관리자 로그인 성공 코드
