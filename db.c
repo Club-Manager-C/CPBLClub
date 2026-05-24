@@ -6,7 +6,7 @@
 
 const char *DB_HOST = "localhost";
 const char *DB_USER = "root";
-const char *DB_PW = "rds12003!";
+const char *DB_PW = "kim7479050810#";
 const char *DB_NAME = "cpbl_db";
 
 void init_db(MYSQL **conn) {
@@ -17,8 +17,8 @@ void init_db(MYSQL **conn) {
   }
 
   // DB 서버 접속 전 SSL 옵션 끄기 (수정된 코드)
-  bool my_ssl = false;
-  mysql_options(*conn, MYSQL_OPT_SSL_MODE, &my_ssl);
+  enum mysql_ssl_mode ssl_mode = SSL_MODE_DISABLED;
+  mysql_options(*conn, MYSQL_OPT_SSL_MODE, &ssl_mode);
 
   if (mysql_real_connect(*conn, DB_HOST, DB_USER, DB_PW, NULL, 3306, NULL, 0) == NULL) {
     fprintf(stderr, "MySQL 연결 실패: %s\n", mysql_error(*conn));
