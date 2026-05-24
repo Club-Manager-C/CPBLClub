@@ -20,6 +20,7 @@
                 "Admin_Interface.c",
                 "clube_manage.c",
                 "category.c",
+                "filter.c",
                 "-o",
                 "CPBL.exe",
                 "-I",
