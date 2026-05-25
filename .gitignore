@@ -2,3 +2,5 @@ CPBL.exe
 *.dll
 *.lib
 include/
+.vscode/
+.vs/

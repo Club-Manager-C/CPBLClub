@@ -1,6 +1,7 @@
 #include "db.h"
 #include "category.h"
 #include "clube_manage.h"
+#include "apply_period.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -161,7 +162,7 @@ void admin_home_screen(MYSQL *conn) {
 
         switch (choice) {
             case 1:
-                printf("\n[동아리 등록 기간 설정]\n(준비 중입니다)\n");
+                manage_apply_period(conn);
                 break;
             case 2:
                 club_manage_menu(conn);
