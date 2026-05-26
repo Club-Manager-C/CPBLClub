@@ -28,19 +28,29 @@ void apply_club_leader(MYSQL *conn, const char *logged_id) {
   // 카테고리 로딩
   printf("\n[카테고리 목록]\n");
   if (mysql_query(conn,
-                  "SELECT category_id, category_name FROM club_categories")) {
+                  "SELECT category_id, category_name FROM club_categories WHERE category_name != '전공' ORDER BY category_id ASC")) {
     printf("카테고리 로딩 실패: %s\n", mysql_error(conn));
     return;
   }
   MYSQL_RES *res = mysql_store_result(conn);
   MYSQL_ROW row;
+  int cat_ids[100];
+  int cat_count = 0;
   while ((row = mysql_fetch_row(res))) {
-    printf("%s. %s\n", row[0], row[1]);
+    cat_ids[cat_count] = atoi(row[0]);
+    printf("%d. %s\n", cat_count + 1, row[1]);
+    cat_count++;
   }
   mysql_free_result(res);
 
+  int choice;
   printf("카테고리 번호 선택: ");
-  scanf("%d", &category_id);
+  scanf("%d", &choice);
+  if (choice < 1 || choice > cat_count) {
+    printf("잘못된 선택입니다.\n");
+    return;
+  }
+  category_id = cat_ids[choice - 1];
 
   printf("지도 교수님 이름: ");
   scanf("%49s", professor_name);
@@ -66,8 +76,8 @@ void apply_club_leader(MYSQL *conn, const char *logged_id) {
   char query[2048];
   sprintf(query,
           "INSERT INTO clubs (club_name, category_id, description, professor_name, "
-          "operating_hours, leader_id, status) "
-          "VALUES ('%s', %d, '%s', '%s', '%s', '%s', '대기')",
+          "operating_hours, leader_idx, status) "
+          "VALUES ('%s', %d, '%s', '%s', '%s', (SELECT user_idx FROM users WHERE id = '%s'), '대기')",
           esc_club_name, category_id, esc_desc, esc_prof, esc_hours, esc_logged_id);
 
   if (mysql_query(conn, query)) {
@@ -86,28 +96,39 @@ void apply_club_leader(MYSQL *conn, const char *logged_id) {
 void view_clubs_by_category(MYSQL *conn) {
   printf("\n=== 동아리 카테고리 목록 ===\n");
   if (mysql_query(conn,
-                  "SELECT category_id, category_name FROM club_categories")) {
+                  "SELECT category_id, category_name FROM club_categories WHERE category_name != '전공' ORDER BY category_id ASC")) {
     printf("카테고리 로딩 실패: %s\n", mysql_error(conn));
     return;
   }
   MYSQL_RES *res = mysql_store_result(conn);
   MYSQL_ROW row;
+  int cat_ids[100];
+  int cat_count = 0;
   while ((row = mysql_fetch_row(res))) {
-    printf("%s. %s\n", row[0], row[1]);
+    cat_ids[cat_count] = atoi(row[0]);
+    printf("%d. %s\n", cat_count + 1, row[1]);
+    cat_count++;
   }
   mysql_free_result(res);
 
-  int category_id;
+  int choice;
   printf("\n조회할 카테고리 번호 선택 (0. 뒤로가기): ");
-  scanf("%d", &category_id);
+  scanf("%d", &choice);
 
-  if (category_id == 0)
+  if (choice == 0)
     return;
+
+  if (choice < 1 || choice > cat_count) {
+    printf("잘못된 선택입니다.\n");
+    return;
+  }
+  int category_id = cat_ids[choice - 1];
 
   char query[512];
   sprintf(query,
-          "SELECT club_name, leader_id, purpose FROM clubs "
-          "WHERE category_id = %d AND status = '승인'",
+          "SELECT c.club_name, u.id, c.description "
+          "FROM clubs c LEFT JOIN users u ON c.leader_idx = u.user_idx "
+          "WHERE c.category_id = %d AND c.status = '승인'",
           category_id);
 
   if (mysql_query(conn, query)) {
@@ -122,8 +143,8 @@ void view_clubs_by_category(MYSQL *conn) {
   } else {
     MYSQL_ROW club_row;
     while ((club_row = mysql_fetch_row(club_res))) {
-      printf("- 동아리명: %s (리더: %s)\n", club_row[0], club_row[1]);
-      printf("  목적: %s\n\n", club_row[2]);
+      printf("- 동아리명: %s (리더: %s)\n", club_row[0], club_row[1] ? club_row[1] : "없음");
+      printf("  설명: %s\n\n", club_row[2] ? club_row[2] : "");
     }
   }
   mysql_free_result(club_res);
@@ -153,7 +174,7 @@ void home_screen(MYSQL *conn, const char *logged_id) {
       view_clubs_by_category(conn);
       break;
     case 2:
-      major_club_board(conn);
+      major_club_board(conn, logged_id);
       break;
     case 3:
       my_page(conn, logged_id);

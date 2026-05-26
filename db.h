@@ -15,17 +15,25 @@ int register_user(MYSQL *conn, const char *id, const char *pw,
 void close_db(MYSQL *conn);
 int insert_message(MYSQL *conn, const char *user_id, const char *content);
 int get_user_idx_by_id(MYSQL *conn, const char *user_id);
+int is_user_club_leader(MYSQL *conn, const char *user_id);
 
 // ── 게시글 ──────────────────────────────────────
 void get_my_posts(MYSQL *conn, const char *user_id);
 int update_post(MYSQL *conn, int post_id, const char *user_id,
                 const char *new_content);
 void get_posts_by_category(MYSQL *conn, int category_id);
+int insert_post(MYSQL *conn, const char *user_id, int category_id, const char *title, const char *content);
+int delete_post(MYSQL *conn, int post_id, const char *user_id);
 
 // ── 댓글 ────────────────────────────────────────
 void get_my_comments(MYSQL *conn, const char *user_id);
 int update_comment(MYSQL *conn, int comment_id, const char *user_id,
                    const char *new_content);
+int insert_comment(MYSQL *conn, int post_id, const char *user_id, const char *content, int parent_comment_id);
+int insert_comment_like(MYSQL *conn, int comment_id, const char *user_id);
+int get_comment_likes_count(MYSQL *conn, int comment_id);
+int has_user_liked_comment(MYSQL *conn, int comment_id, const char *user_id);
+
 
 // ── 시간표 ──────────────────────────────────────
 void get_my_schedule(MYSQL *conn, const char *user_id);
