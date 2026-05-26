@@ -11,7 +11,7 @@ void manageClubRequests(MYSQL *conn) {
     char query[1024];
     
     while (1) {
-        printf("\n==================================================\n");
+        printf("\n================================================\n");
         printf("  동아리 개설 및 동아리장 승인 대기 목록\n");
         printf("==================================================\n");
         
@@ -152,8 +152,8 @@ void admin_home_screen(MYSQL *conn) {
         printf("  총관리자 메뉴\n");
         printf("============================\n");
         printf("1. 동아리 등록 기간 설정\n");
-        printf("2. 동아리 관리\n");
-        printf("3. 동아리장 승인\n");
+        printf("2. 동아리 삭제\n");
+        printf("3. 동아리 개설 신청 관리\n");
         printf("4. 동아리 카테고리 설정\n");
         printf("0. 종료\n");
         printf("============================\n");
@@ -165,7 +165,7 @@ void admin_home_screen(MYSQL *conn) {
                 manage_apply_period(conn);
                 break;
             case 2:
-                club_manage_menu(conn);
+                delete_club(conn);
                 break;
             case 3:
                 manageClubRequests(conn);
