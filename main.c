@@ -206,6 +206,7 @@ int main() {
     printf("1. 로그인\n");
     printf("2. 회원가입\n");
     printf("0. 종료\n");
+    printf("=====================\n");
     printf("입력: ");
     scanf("%d", &choice);
 
