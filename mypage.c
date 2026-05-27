@@ -363,6 +363,7 @@ void my_page(MYSQL *conn, const char *logged_id) {
     printf("3. 메시지함\n");
     printf("4. 시간표 확인/수정\n");
     printf("5. 내 동아리 공간 (공지사항)\n");
+    printf("6. 사용자 정보 수정\n");
     printf("9. 계정 탈퇴\n");
     printf("0. 뒤로\n");
     printf("============================\n");
@@ -378,6 +379,7 @@ void my_page(MYSQL *conn, const char *logged_id) {
       }
       case 4: my_schedule_menu(conn, logged_id); break;
       case 5: my_clubs_menu(conn, logged_id);    break;
+      case 6: update_user_profile(conn, logged_id); break;
       case 9: {
         if (delete_user_account(conn, logged_id)) {
           return; // 성공적으로 탈퇴 시 메인 로그인 화면으로 빠져나감

@@ -3,6 +3,7 @@
 
 #include <mysql.h>
 #include <windows.h>
+#include <stdbool.h>
 
 void init_db(MYSQL **conn);
 int check_login(MYSQL *conn, const char *id, const char *pw);
@@ -55,5 +56,9 @@ int verify_club_owner(MYSQL *conn, int club_id, const char *logged_id);
 int kick_club_member(MYSQL *conn, int club_id, const char *owner_id, const char *target_student_id);
 int transfer_club_ownership(MYSQL *conn, int club_id, const char *current_owner_id, const char *target_student_id);
 int update_club_info(MYSQL *conn, int club_id, const char *owner_id, const char *new_name, const char *new_desc);
+
+// ── 사용자 정보 수정 ───────────────────────────
+bool is_nickname_dup(MYSQL *conn, const char *logged_id, const char *new_nickname);
+void update_user_profile(MYSQL *conn, const char *logged_id);
 
 #endif // DB_H

@@ -1076,3 +1076,79 @@ int update_club_info(MYSQL *conn, int club_id, const char *owner_id, const char 
     printf("✅ 동아리 정보(이름, 소개글)가 수정되었습니다.\n");
     return 1;
 }
+
+// ─────────────────────────────────────────────────
+// 사용자 정보 수정 기능
+// ─────────────────────────────────────────────────
+
+bool is_nickname_dup(MYSQL *conn, const char *logged_id, const char *new_nickname) {
+    char query[512];
+    char esc_id[100], esc_nick[150];
+    
+    mysql_real_escape_string(conn, esc_id, logged_id, strlen(logged_id));
+    mysql_real_escape_string(conn, esc_nick, new_nickname, strlen(new_nickname));
+
+    sprintf(query, 
+            "SELECT 1 FROM users WHERE nickname = '%s' AND id != '%s'", 
+            esc_nick, esc_id);
+
+    if (mysql_query(conn, query)) {
+        printf("⚠️ 닉네임 중복 검사 실패: %s\n", mysql_error(conn));
+        return true; 
+    }
+
+    MYSQL_RES *res = mysql_store_result(conn);
+    if (!res) return true;
+
+    bool is_dup = (mysql_num_rows(res) > 0);
+    mysql_free_result(res);
+
+    return is_dup;
+}
+
+void update_user_profile(MYSQL *conn, const char *logged_id) {
+    char current_pw[100];
+    
+    printf("\n=== 사용자 정보 수정 ===\n");
+    printf("보안을 위해 현재 비밀번호를 입력해주세요: ");
+    scanf("%99s", current_pw);
+    while(getchar() != '\n'); 
+
+    if (!check_login(conn, logged_id, current_pw)) {
+        printf("❌ 비밀번호가 일치하지 않습니다. 정보 수정을 취소합니다.\n");
+        return;
+    }
+
+    char new_nickname[50];
+    char new_pw[100];
+
+    printf("새로운 닉네임 입력 (변경하지 않으려면 기존 닉네임 입력): ");
+    fgets(new_nickname, sizeof(new_nickname), stdin);
+    new_nickname[strcspn(new_nickname, "\n")] = '\0'; 
+
+    if (is_nickname_dup(conn, logged_id, new_nickname)) {
+        printf("❌ 이미 사용 중인 닉네임입니다. 수정을 중단합니다.\n");
+        return; 
+    }
+
+    printf("새로운 비밀번호 입력 (변경하지 않으려면 기존 비밀번호 입력): ");
+    scanf("%99s", new_pw);
+    while(getchar() != '\n');
+
+    char esc_id[100], esc_nick[150], esc_pw[200];
+    mysql_real_escape_string(conn, esc_id, logged_id, strlen(logged_id));
+    mysql_real_escape_string(conn, esc_nick, new_nickname, strlen(new_nickname));
+    mysql_real_escape_string(conn, esc_pw, new_pw, strlen(new_pw));
+
+    char query[1024];
+    sprintf(query, 
+            "UPDATE users SET nickname = '%s', pw = '%s' WHERE id = '%s'", 
+            esc_nick, esc_pw, esc_id);
+
+    if (mysql_query(conn, query)) {
+        printf("❌ 사용자 정보 업데이트에 실패했습니다: %s\n", mysql_error(conn));
+        return;
+    }
+
+    printf("✅ 사용자 정보가 성공적으로 수정되었습니다.\n");
+}
