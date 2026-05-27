@@ -14,14 +14,13 @@ void manageClubRequests(MYSQL *conn) {
         printf("  동아리 개설 및 동아리장 승인 대기 목록\n");
         printf("==================================================\n");
         
-        // clubs 테이블과 users 테이블을 leader_id로 JOIN하여 대기 중인 목록 조회
         sprintf(query, 
-            "SELECT c.club_id, c.club_name, c.leader_id, "
-            "u.name, u.student_id, c.apply_date "
+            "SELECT c.club_id, c.club_name, u.id, "
+            "u.name, u.student_id, c.created_at "
             "FROM clubs c "
-            "JOIN users u ON c.leader_id = u.id "
+            "JOIN users u ON c.leader_idx = u.user_idx "
             "WHERE c.status = '대기' "
-            "ORDER BY c.apply_date ASC"
+            "ORDER BY c.created_at ASC"
         );
         
         if (mysql_query(conn, query)) {
@@ -62,8 +61,12 @@ void manageClubRequests(MYSQL *conn) {
         }
         if (target_club_id == 0) return;
         
-        // 입력한 club_id가 실제로 존재하는지 대기 상태인지 검증
-        sprintf(query, "SELECT club_name, leader_id FROM clubs WHERE club_id = %d AND status = '대기'", target_club_id);
+        sprintf(query, 
+            "SELECT c.club_name, u.id FROM clubs c "
+            "JOIN users u ON c.leader_idx = u.user_idx "
+            "WHERE c.club_id = %d AND c.status = '대기'", 
+            target_club_id
+        );
         if (mysql_query(conn, query)) {
             fprintf(stderr, "검증 쿼리 실패: %s\n", mysql_error(conn));
             continue;
