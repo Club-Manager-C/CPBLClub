@@ -41,5 +41,12 @@ int add_schedule(MYSQL *conn, const char *user_id, const char *day,
                  const char *start, const char *end, const char *subject,
                  const char *location);
 int delete_schedule(MYSQL *conn, int schedule_id, const char *user_id);
+// ── 동아리 관리 (동아리장 전용) ──────────────────────────
+int get_user_owned_club(MYSQL *conn, const char *user_id);
+int verify_club_owner(MYSQL *conn, int club_id, const char *logged_id);
+int kick_club_member(MYSQL *conn, int club_id, const char *owner_id, const char *target_student_id);
+int create_promotion_post(MYSQL *conn, int club_id, const char *owner_id, const char *title, const char *content);
+int transfer_club_ownership(MYSQL *conn, int club_id, const char *current_owner_id, const char *target_student_id);
+int update_club_info(MYSQL *conn, int club_id, const char *owner_id, const char *new_name, const char *new_desc);
 
 #endif // DB_H

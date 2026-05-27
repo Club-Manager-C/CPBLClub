@@ -633,5 +633,262 @@ int delete_post(MYSQL *conn, int post_id, const char *user_id) {
   return (int)mysql_affected_rows(conn) > 0 ? 1 : 0;
 }
 
+// ─────────────────────────────────────────────────
+// 동아리장 전용 관리 기능
+// ─────────────────────────────────────────────────
+#include <ctype.h>
+
+int get_user_owned_club(MYSQL *conn, const char *user_id) {
+    char query[512];
+    char esc_user_id[100];
+    mysql_real_escape_string(conn, esc_user_id, user_id, strlen(user_id));
+
+    sprintf(query,
+            "SELECT c.club_id FROM clubs c "
+            "JOIN users u ON c.leader_idx = u.user_idx "
+            "WHERE u.id = '%s' AND c.status = '승인'", esc_user_id);
+            
+    if (mysql_query(conn, query)) {
+        return 0;
+    }
+
+    MYSQL_RES *res = mysql_store_result(conn);
+    if (res == NULL) return 0;
+    
+    int club_id = 0;
+    if (mysql_num_rows(res) > 0) {
+        MYSQL_ROW row = mysql_fetch_row(res);
+        club_id = atoi(row[0]);
+    }
+    mysql_free_result(res);
+    return club_id;
+}
+
+int verify_club_owner(MYSQL *conn, int club_id, const char *logged_id) {
+    char query[512];
+    char esc_logged_id[100];
+    mysql_real_escape_string(conn, esc_logged_id, logged_id, strlen(logged_id));
+
+    sprintf(query, 
+            "SELECT 1 FROM clubs c "
+            "JOIN users u ON c.leader_idx = u.user_idx "
+            "WHERE c.club_id = %d AND u.id = '%s' AND c.status = '승인'", 
+            club_id, esc_logged_id);
+
+    if (mysql_query(conn, query)) return 0;
+
+    MYSQL_RES *res = mysql_store_result(conn);
+    if (res == NULL) return 0;
+
+    int is_owner = (mysql_num_rows(res) > 0) ? 1 : 0;
+    mysql_free_result(res);
+
+    return is_owner;
+}
+
+int kick_club_member(MYSQL *conn, int club_id, const char *owner_id, const char *target_student_id) {
+    if (!verify_club_owner(conn, club_id, owner_id)) {
+        printf("[오류] 권한이 없습니다. 동아리장만 회원 강퇴가 가능합니다.\n");
+        return 0;
+    }
+
+    char esc_student_id[20];
+    mysql_real_escape_string(conn, esc_student_id, target_student_id, strlen(target_student_id));
+
+    char query[512];
+    sprintf(query, "SELECT student_id FROM users WHERE id = '%s'", owner_id);
+    if (mysql_query(conn, query) == 0) {
+        MYSQL_RES *res = mysql_store_result(conn);
+        if (res) {
+            MYSQL_ROW row = mysql_fetch_row(res);
+            if (row && strcmp(row[0], esc_student_id) == 0) {
+                printf("[예외] 동아리장 자기 자신은 강퇴할 수 없습니다.\n");
+                mysql_free_result(res);
+                return 0;
+            }
+            mysql_free_result(res);
+        }
+    }
+
+    sprintf(query, 
+            "SELECT cm.user_idx FROM clubmembers cm "
+            "JOIN users u ON cm.user_idx = u.user_idx "
+            "WHERE cm.club_id = %d AND u.student_id = '%s'", 
+            club_id, esc_student_id);
+
+    if (mysql_query(conn, query)) return 0;
+
+    MYSQL_RES *res_target = mysql_store_result(conn);
+    if (res_target == NULL || mysql_num_rows(res_target) == 0) {
+        printf("[예외] 존재하지 않거나 해당 동아리에 소속되어 있지 않은 회원입니다.\n");
+        if (res_target) mysql_free_result(res_target);
+        return 0;
+    }
+    MYSQL_ROW target_row = mysql_fetch_row(res_target);
+    int target_user_idx = atoi(target_row[0]);
+    mysql_free_result(res_target);
+
+    sprintf(query, 
+            "DELETE FROM clubmembers "
+            "WHERE club_id = %d AND user_idx = %d", 
+            club_id, target_user_idx);
+
+    if (mysql_query(conn, query)) {
+        printf("[오류] 강퇴 처리 실패: %s\n", mysql_error(conn));
+        return 0;
+    }
+
+    printf("[성공] 학번 %s 회원을 동아리에서 강퇴 완료하였습니다.\n", target_student_id);
+    return 1;
+}
+
+int create_promotion_post(MYSQL *conn, int club_id, const char *owner_id, const char *title, const char *content) {
+    if (!verify_club_owner(conn, club_id, owner_id)) {
+        printf("[오류] 권한이 없습니다.\n");
+        return 0;
+    }
+    
+    char esc_title[512], esc_content[4096];
+    mysql_real_escape_string(conn, esc_title, title, strlen(title));
+    mysql_real_escape_string(conn, esc_content, content, strlen(content));
+
+    char query[5000];
+    sprintf(query, 
+            "INSERT INTO posts (club_id, user_idx, type_id, title, content) "
+            "VALUES (%d, (SELECT user_idx FROM users WHERE id = '%s'), 1, '%s', '%s')", 
+            club_id, owner_id, esc_title, esc_content);
+
+    if (mysql_query(conn, query)) {
+        printf("[오류] 홍보물 게시 실패: %s\n", mysql_error(conn));
+        return 0;
+    }
+
+    printf("[성공] 동아리 홍보 게시물이 정상적으로 등록되었습니다.\n");
+    return 1;
+}
+
+int transfer_club_ownership(MYSQL *conn, int club_id, const char *current_owner_id, const char *target_student_id) {
+    if (!verify_club_owner(conn, club_id, current_owner_id)) {
+        printf("[오류] 권한이 없습니다.\n");
+        return 0;
+    }
+
+    char esc_student_id[20];
+    char query[512];
+    mysql_real_escape_string(conn, esc_student_id, target_student_id, strlen(target_student_id));
+
+    sprintf(query, "SELECT student_id FROM users WHERE id = '%s'", current_owner_id);
+    if (mysql_query(conn, query) == 0) {
+        MYSQL_RES *res = mysql_store_result(conn);
+        if (res) {
+            MYSQL_ROW row = mysql_fetch_row(res);
+            if (row && strcmp(row[0], esc_student_id) == 0) {
+                printf("[예외] 자기 자신에게 위임할 수 없습니다.\n");
+                mysql_free_result(res);
+                return 0;
+            }
+            mysql_free_result(res);
+        }
+    }
+
+    sprintf(query, 
+            "SELECT cm.user_idx FROM clubmembers cm "
+            "JOIN users u ON cm.user_idx = u.user_idx "
+            "WHERE cm.club_id = %d AND u.student_id = '%s'", 
+            club_id, esc_student_id);
+
+    if (mysql_query(conn, query)) return 0;
+
+    MYSQL_RES *res_target = mysql_store_result(conn);
+    if (res_target == NULL || mysql_num_rows(res_target) == 0) {
+        printf("[예외] 해당 회원을 찾을 수 없거나 동아리원이 아닙니다.\n");
+        if (res_target) mysql_free_result(res_target);
+        return 0;
+    }
+    MYSQL_ROW target_row = mysql_fetch_row(res_target);
+    int new_leader_idx = atoi(target_row[0]);
+    mysql_free_result(res_target);
+
+    int old_leader_idx = -1;
+    sprintf(query, "SELECT user_idx FROM users WHERE id = '%s'", current_owner_id);
+    if (mysql_query(conn, query) == 0) {
+        MYSQL_RES *res_old = mysql_store_result(conn);
+        if (res_old) {
+            MYSQL_ROW row = mysql_fetch_row(res_old);
+            if (row) old_leader_idx = atoi(row[0]);
+            mysql_free_result(res_old);
+        }
+    }
+
+    if (old_leader_idx == -1) return 0;
+
+    if (mysql_query(conn, "START TRANSACTION")) return 0;
+
+    sprintf(query, "UPDATE clubs SET leader_idx = %d WHERE club_id = %d", new_leader_idx, club_id);
+    if (mysql_query(conn, query)) { mysql_query(conn, "ROLLBACK"); return 0; }
+
+    sprintf(query, "UPDATE clubmembers SET role = 'Leader' WHERE club_id = %d AND user_idx = %d", club_id, new_leader_idx);
+    if (mysql_query(conn, query)) { mysql_query(conn, "ROLLBACK"); return 0; }
+
+    sprintf(query, "UPDATE clubmembers SET role = 'Member' WHERE club_id = %d AND user_idx = %d", club_id, old_leader_idx);
+    if (mysql_query(conn, query)) { mysql_query(conn, "ROLLBACK"); return 0; }
+
+    if (mysql_query(conn, "COMMIT")) { mysql_query(conn, "ROLLBACK"); return 0; }
+
+    printf("[성공] 위임이 완료되었습니다.\n");
+    return 1;
+}
+
+static int is_all_whitespace(const char *str) {
+    if (str == NULL) return 1;
+    while (*str) {
+        if (!isspace((unsigned char)*str)) return 0;
+        str++;
+    }
+    return 1;
+}
+
+int update_club_info(MYSQL *conn, int club_id, const char *owner_id, const char *new_name, const char *new_desc) {
+    if (!verify_club_owner(conn, club_id, owner_id)) {
+        printf("[오류] 권한이 없습니다.\n");
+        return 0;
+    }
+
+    if (new_name == NULL || strlen(new_name) == 0 || is_all_whitespace(new_name)) {
+        printf("[오류] 동아리명 빈 값 불가.\n");
+        return 0;
+    }
+    if (new_desc == NULL || strlen(new_desc) == 0 || is_all_whitespace(new_desc)) {
+        printf("[오류] 동아리 소개글 빈 값 불가.\n");
+        return 0;
+    }
+
+    if (strlen(new_name) > 50) {
+        printf("[오류] 이름 50자 이하.\n");
+        return 0;
+    }
+    if (strlen(new_desc) > 300) {
+        printf("[오류] 소개글 300자 이하.\n");
+        return 0;
+    }
+
+    char esc_name[200], esc_desc[1000];
+    mysql_real_escape_string(conn, esc_name, new_name, strlen(new_name));
+    mysql_real_escape_string(conn, esc_desc, new_desc, strlen(new_desc));
+
+    char query[1500];
+    sprintf(query, 
+            "UPDATE clubs SET club_name = '%s', description = '%s' WHERE club_id = %d", 
+            esc_name, esc_desc, club_id);
+
+    if (mysql_query(conn, query)) {
+        printf("[오류] 정보 변경 실패: %s\n", mysql_error(conn));
+        return 0;
+    }
+
+    printf("[성공] 정보가 수정되었습니다.\n");
+    return 1;
+}
+
 
 
