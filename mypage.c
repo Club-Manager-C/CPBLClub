@@ -1,4 +1,5 @@
 #include "mypage.h"
+#include "board.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -190,18 +191,179 @@ void viewMyMessages(MYSQL *conn, const char *logged_id) {
 }
 
 // ─────────────────────────────────────────────
+// 동아리장 관리 하위 메뉴
+// ─────────────────────────────────────────────
+static void club_manage_menu(MYSQL *conn, int club_id, const char *logged_id) {
+  int choice;
+  while (1) {
+    printf("\n====================================\n");
+    printf("         동아리 관리 메뉴\n");
+    printf("====================================\n");
+    printf("1. 동아리원 강퇴\n");
+    printf("2. 동아리장 권한 위임\n");
+    printf("3. 동아리 정보 수정\n");
+    printf("0. 뒤로가기\n");
+    printf("입력: ");
+    
+    if (scanf("%d", &choice) != 1) {
+      while (getchar() != '\n');
+      continue;
+    }
+    
+    if (choice == 0) {
+      break;
+    } else if (choice == 1) {
+      char target_id[20];
+      printf("강퇴할 동아리원의 학번 입력: ");
+      scanf("%19s", target_id);
+      kick_club_member(conn, club_id, logged_id, target_id);
+    } else if (choice == 2) {
+      char target_id[20];
+      printf("위임받을 회원의 학번 입력: ");
+      scanf("%19s", target_id);
+      if (transfer_club_ownership(conn, club_id, logged_id, target_id)) {
+        printf("⚠️ 권한이 위임되어 관리 메뉴를 종료합니다.\n");
+        return; 
+      }
+    } else if (choice == 3) {
+      char new_name[100], new_desc[500];
+      printf("새 동아리 이름 (최대 50자): ");
+      while (getchar() != '\n');
+      fgets(new_name, sizeof(new_name), stdin);
+      new_name[strcspn(new_name, "\n")] = '\0';
+      
+      printf("새 소개글 (최대 300자): ");
+      fgets(new_desc, sizeof(new_desc), stdin);
+      new_desc[strcspn(new_desc, "\n")] = '\0';
+      
+      update_club_info(conn, club_id, logged_id, new_name, new_desc);
+    } else {
+      printf("잘못된 입력입니다.\n");
+    }
+  }
+}
+
+// ─────────────────────────────────────────────
+// 동아리 개별 공간 (공지사항 조회/작성)
+// ─────────────────────────────────────────────
+static void club_space_menu(MYSQL *conn, int club_id, const char *club_name, const char *logged_id, int is_owner) {
+  int choice;
+  while (1) {
+    printf("\n====================================\n");
+    printf(" [%s] 동아리 공간 \n", club_name);
+    printf("====================================\n");
+    get_club_notices(conn, club_id);
+    
+    printf("\n1. 공지사항 새로고침\n");
+    printf("2. 공지사항 상세 보기\n");
+    if (is_owner) {
+      printf("3. 공지사항 작성\n");
+      printf("4. 동아리 관리 (동아리장 전용)\n");
+    }
+    printf("0. 뒤로가기\n");
+    printf("입력: ");
+    
+    if (scanf("%d", &choice) != 1) {
+      while (getchar() != '\n');
+      continue;
+    }
+    
+    if (choice == 0) {
+      break;
+    } else if (choice == 1) {
+      continue;
+    } else if (choice == 2) {
+      int post_id;
+      printf("확인할 공지사항 번호(ID) 입력: ");
+      if (scanf("%d", &post_id) != 1) {
+        while (getchar() != '\n');
+        continue;
+      }
+      view_post_detail_menu(conn, post_id, logged_id);
+    } else if (choice == 3 && is_owner) {
+      char title[200], content[2000];
+      printf("\n=== 공지사항 작성 ===\n");
+      printf("제목: ");
+      while (getchar() != '\n');
+      fgets(title, sizeof(title), stdin);
+      title[strcspn(title, "\n")] = '\0';
+      
+      printf("내용: ");
+      fgets(content, sizeof(content), stdin);
+      content[strcspn(content, "\n")] = '\0';
+      
+      if (insert_club_notice(conn, club_id, logged_id, title, content)) {
+        printf("✅ 공지사항이 성공적으로 등록되었습니다.\n");
+      }
+    } else if (choice == 4 && is_owner) {
+      club_manage_menu(conn, club_id, logged_id);
+      // 권한이 위임되어 상실되었을 수 있으므로 is_owner 갱신
+      is_owner = verify_club_owner(conn, club_id, logged_id);
+    } else {
+      printf("잘못된 입력입니다.\n");
+    }
+  }
+}
+
+// ─────────────────────────────────────────────
+// 내 동아리 목록 (가입 동아리 선택)
+// ─────────────────────────────────────────────
+static void my_clubs_menu(MYSQL *conn, const char *logged_id) {
+  int club_ids[50];
+  char club_names[50][100];
+  int roles[50]; // 1=OWNER, 0=MEMBER
+  
+  while (1) {
+    int count = get_user_joined_clubs(conn, logged_id, club_ids, club_names, roles);
+    if (count == 0) {
+      printf("\n가입된 동아리가 없습니다.\n");
+      return;
+    }
+    
+    printf("\n============================\n");
+    printf("      내 동아리 목록\n");
+    printf("============================\n");
+    for (int i = 0; i < count; i++) {
+      printf("%d. %s %s\n", i + 1, club_names[i], roles[i] ? "[OWNER]" : "[MEMBER]");
+    }
+    printf("0. 뒤로가기\n");
+    printf("============================\n");
+    printf("입장할 동아리 번호 선택: ");
+    
+    int choice;
+    if (scanf("%d", &choice) != 1) {
+      while (getchar() != '\n');
+      continue;
+    }
+    
+    if (choice == 0) {
+      break;
+    } else if (choice >= 1 && choice <= count) {
+      int idx = choice - 1;
+      club_space_menu(conn, club_ids[idx], club_names[idx], logged_id, roles[idx]);
+    } else {
+      printf("잘못된 번호입니다.\n");
+    }
+  }
+}
+
+// ─────────────────────────────────────────────
 // 마이페이지 메인
 // ─────────────────────────────────────────────
 void my_page(MYSQL *conn, const char *logged_id) {
   int choice;
   while (1) {
+    display_my_profile(conn, logged_id);
+
     printf("\n============================\n");
-    printf("  마이페이지 (%s)\n", logged_id);
+    printf("  마이페이지 메뉴\n");
     printf("============================\n");
     printf("1. 내 게시글 확인/수정\n");
     printf("2. 내 댓글 확인/수정\n");
     printf("3. 메시지함\n");
     printf("4. 시간표 확인/수정\n");
+    printf("5. 내 동아리 공간 (공지사항)\n");
+    printf("9. 계정 탈퇴\n");
     printf("0. 뒤로\n");
     printf("============================\n");
     printf("입력: ");
@@ -215,6 +377,13 @@ void my_page(MYSQL *conn, const char *logged_id) {
         break;
       }
       case 4: my_schedule_menu(conn, logged_id); break;
+      case 5: my_clubs_menu(conn, logged_id);    break;
+      case 9: {
+        if (delete_user_account(conn, logged_id)) {
+          return; // 성공적으로 탈퇴 시 메인 로그인 화면으로 빠져나감
+        }
+        break;
+      }
       case 0: return;
       default: printf("잘못된 입력입니다.\n");
     }
