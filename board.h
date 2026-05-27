@@ -9,4 +9,7 @@ void promo_board(MYSQL *conn, const char *logged_id);
 // 전공 동아리 게시판 (카테고리 ID 2)
 void major_club_board(MYSQL *conn, const char *logged_id);
 
+// 게시글 상세 메뉴 (공유용)
+void view_post_detail_menu(MYSQL *conn, int post_id, const char *logged_id);
+
 #endif // BOARD_H
