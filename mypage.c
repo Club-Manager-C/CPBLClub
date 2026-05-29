@@ -285,6 +285,91 @@ static void club_manage_menu(MYSQL *conn, int club_id, const char *logged_id) {
 // ─────────────────────────────────────────────
 // 동아리 개별 공간 (공지사항 조회/작성)
 // ─────────────────────────────────────────────
+static void search_club_notices_menu(MYSQL *conn, int club_id, const char *logged_id) {
+  char keyword[100];
+  int choice;
+
+  while (1) {
+    if (is_currently_suspended(conn, logged_id)) return;
+
+    printf("\n검색할 키워드를 입력하세요 (최대 30자): ");
+    while (getchar() != '\n'); // 이전 입력 버퍼 비우기 (중요!)
+
+    if (fgets(keyword, sizeof(keyword), stdin) == NULL) {
+      printf("입력 오류가 발생했습니다.\n");
+      return;
+    }
+
+    // 개행 문자 제거
+    keyword[strcspn(keyword, "\n")] = '\0';
+
+    // 30자 초과 시 자르기
+    if (strlen(keyword) > 30) {
+      keyword[30] = '\0';
+    }
+
+    // 공백 입력 예외 처리
+    if (is_string_whitespace_only(keyword)) {
+      printf("\n❌ 검색어에 공백만 입력할 수 없습니다.\n");
+      return;
+    }
+
+    // DB 조회 및 결과에 따른 하위 분기 루프
+    while (1) {
+      if (is_currently_suspended(conn, logged_id)) return;
+
+      int result_count = search_club_notices_by_keyword(conn, club_id, keyword);
+
+      if (result_count > 0) {
+        // Case A: 검색 결과가 있을 때
+        printf("\n1. 공지사항 상세 보기\n");
+        printf("0. 뒤로 가기\n");
+        printf("선택: ");
+        if (scanf("%d", &choice) != 1) {
+          while (getchar() != '\n'); // 버퍼 비우기
+          printf("잘못된 입력입니다.\n");
+          continue;
+        }
+
+        if (choice == 1) {
+          int post_id;
+          printf("확인할 공지사항 번호(ID) 입력: ");
+          if (scanf("%d", &post_id) != 1) {
+            while (getchar() != '\n');
+            printf("잘못된 번호입니다.\n");
+            continue;
+          }
+          view_post_detail_menu(conn, post_id, logged_id);
+          // 상세보기 이후 다시 루프를 돌며 검색 결과 및 메뉴를 계속 보여줌
+        } else if (choice == 0) {
+          return; // 검색 화면 종료 및 동아리 공간으로 복귀
+        } else {
+          printf("잘못된 메뉴 번호입니다.\n");
+        }
+      } else {
+        // Case B: 검색 결과가 없을 때
+        printf("\n❌ 해당 검색어를 포함하는 공지사항이 없습니다.\n");
+        printf("\n1. 다시 검색\n");
+        printf("0. 뒤로 가기\n");
+        printf("선택: ");
+        if (scanf("%d", &choice) != 1) {
+          while (getchar() != '\n'); // 버퍼 비우기
+          printf("잘못된 입력입니다.\n");
+          continue;
+        }
+
+        if (choice == 1) {
+          break; // 안쪽 루프를 깨고 바깥쪽 검색어 입력 단계로 회귀
+        } else if (choice == 0) {
+          return; // 검색 화면 종료 및 동아리 공간으로 복귀
+        } else {
+          printf("잘못된 메뉴 번호입니다.\n");
+        }
+      }
+    }
+  }
+}
+
 static void club_space_menu(MYSQL *conn, int club_id, const char *club_name,
                             const char *logged_id, int is_owner) {
   int choice;
@@ -297,9 +382,10 @@ static void club_space_menu(MYSQL *conn, int club_id, const char *club_name,
 
     printf("\n1. 공지사항 새로고침\n");
     printf("2. 공지사항 상세 보기\n");
+    printf("3. 공지사항 검색\n");
     if (is_owner) {
-      printf("3. 공지사항 작성\n");
-      printf("4. 동아리 관리 (동아리장 전용)\n");
+      printf("4. 공지사항 작성\n");
+      printf("5. 동아리 관리 (동아리장 전용)\n");
     }
     printf("0. 뒤로가기\n");
     printf("입력: ");
@@ -323,7 +409,9 @@ static void club_space_menu(MYSQL *conn, int club_id, const char *club_name,
         continue;
       }
       view_post_detail_menu(conn, post_id, logged_id);
-    } else if (choice == 3 && is_owner) {
+    } else if (choice == 3) {
+      search_club_notices_menu(conn, club_id, logged_id);
+    } else if (choice == 4 && is_owner) {
       char title[200], content[2000];
       printf("\n=== 공지사항 작성 ===\n");
       printf("제목: ");
@@ -347,7 +435,7 @@ static void club_space_menu(MYSQL *conn, int club_id, const char *club_name,
       if (insert_club_notice(conn, club_id, logged_id, title, content)) {
         printf("✅ 공지사항이 성공적으로 등록되었습니다.\n");
       }
-    } else if (choice == 4 && is_owner) {
+    } else if (choice == 5 && is_owner) {
       club_manage_menu(conn, club_id, logged_id);
       // 권한이 위임되어 상실되었을 수 있으므로 is_owner 갱신
       is_owner = verify_club_owner(conn, club_id, logged_id);

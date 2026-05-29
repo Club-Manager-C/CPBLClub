@@ -389,6 +389,47 @@ void get_posts_by_category(MYSQL *conn, int category_id) {
   mysql_free_result(res);
 }
 
+int search_posts_by_keyword(MYSQL *conn, int category_id, const char *keyword) {
+  if (!keyword) return 0;
+
+  // SQL 인젝션 방지를 위한 안전한 이스케이프
+  char esc_keyword[100];
+  mysql_real_escape_string(conn, esc_keyword, keyword, strlen(keyword));
+
+  char query[1024];
+  sprintf(query,
+          "SELECT p.post_id, p.title, u.nickname, p.created_at "
+          "FROM posts p JOIN users u ON p.user_idx = u.user_idx "
+          "WHERE p.type_id = %d AND (p.title LIKE '%%%s%%' OR p.content LIKE '%%%s%%') "
+          "ORDER BY p.created_at DESC",
+          category_id, esc_keyword, esc_keyword);
+
+  if (mysql_query(conn, query)) {
+    fprintf(stderr, "게시글 검색 실패: %s\n", mysql_error(conn));
+    return 0;
+  }
+
+  MYSQL_RES *res = mysql_store_result(conn);
+  if (res == NULL)
+    return 0;
+
+  int row_count = mysql_num_rows(res);
+  if (row_count == 0) {
+    mysql_free_result(res);
+    return 0;
+  }
+
+  printf("\n=== 검색 결과 목록 (최신순) ===\n");
+  printf("%-6s %-30s %-15s %-20s\n", "ID", "제목", "작성자", "작성일");
+  printf("--------------------------------------------------------------------------\n");
+  MYSQL_ROW row;
+  while ((row = mysql_fetch_row(res))) {
+    printf("[%-4s] %-30s %-15s %s\n", row[0], row[1], row[2], row[3]);
+  }
+  mysql_free_result(res);
+  return row_count;
+}
+
 // ─────────────────────────────────────────────────
 // 내 댓글 목록 출력
 // ─────────────────────────────────────────────────
@@ -898,6 +939,46 @@ void get_club_notices(MYSQL *conn, int club_id) {
         printf("%-5s | %-30s | %-15s | %-20s\n", row[0], row[1], row[2], row[3]);
     }
     mysql_free_result(res);
+}
+
+int search_club_notices_by_keyword(MYSQL *conn, int club_id, const char *keyword) {
+    if (!keyword) return 0;
+
+    char esc_keyword[100];
+    mysql_real_escape_string(conn, esc_keyword, keyword, strlen(keyword));
+
+    char query[1024];
+    // type_id = 3 (동아리 내부 공지사항)
+    sprintf(query, 
+        "SELECT p.post_id, p.title, u.nickname, p.created_at "
+        "FROM posts p "
+        "JOIN users u ON p.user_idx = u.user_idx "
+        "WHERE p.club_id = %d AND p.type_id = 3 AND (p.title LIKE '%%%s%%' OR p.content LIKE '%%%s%%') "
+        "ORDER BY p.created_at DESC", club_id, esc_keyword, esc_keyword);
+
+    if (mysql_query(conn, query)) {
+        printf("공지사항 검색 에러: %s\n", mysql_error(conn));
+        return 0;
+    }
+
+    MYSQL_RES *res = mysql_store_result(conn);
+    if (!res) return 0;
+
+    int row_count = mysql_num_rows(res);
+    if (row_count == 0) {
+        mysql_free_result(res);
+        return 0;
+    }
+
+    printf("\n=== 검색 결과 목록 (최신순) ===\n");
+    printf("%-5s | %-30s | %-15s | %-20s\n", "번호", "제목", "작성자", "작성일");
+    printf("-----------------------------------------------------------------------\n");
+    MYSQL_ROW row;
+    while ((row = mysql_fetch_row(res))) {
+        printf("%-5s | %-30s | %-15s | %-20s\n", row[0], row[1], row[2], row[3]);
+    }
+    mysql_free_result(res);
+    return row_count;
 }
 
 int insert_club_notice(MYSQL *conn, int club_id, const char *user_id, const char *title, const char *content) {
