@@ -25,7 +25,7 @@ int update_post(MYSQL *conn, int post_id, const char *user_id,
                 const char *new_content);
 void get_posts_by_category(MYSQL *conn, int category_id);
 int search_posts_by_keyword(MYSQL *conn, int category_id, const char *keyword);
-int insert_post(MYSQL *conn, const char *user_id, int category_id, const char *title, const char *content);
+int insert_post(MYSQL *conn, int club_id, const char *user_id, int category_id, const char *title, const char *content);
 int delete_post(MYSQL *conn, int post_id, const char *user_id);
 
 // ── 댓글 ────────────────────────────────────────

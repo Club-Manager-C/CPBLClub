@@ -10,7 +10,7 @@
 #include <time.h>
 
 void run_admin_interface(MYSQL *conn);
-void view_clubs_by_category(MYSQL *conn);
+void view_clubs_by_category(MYSQL *conn, const char *logged_id);
 
 // ─────────────────────────────────────────────
 // 동아리장 신청 (스텁)
@@ -30,7 +30,7 @@ void apply_club_leader(MYSQL *conn, const char *logged_id) {
   // 카테고리 로딩
   printf("\n[카테고리 목록]\n");
   if (mysql_query(conn,
-                  "SELECT category_id, category_name FROM club_categories WHERE category_name != '전공' ORDER BY category_id ASC")) {
+                  "SELECT category_id, category_name FROM club_categories ORDER BY category_id ASC")) {
     printf("카테고리 로딩 실패: %s\n", mysql_error(conn));
     return;
   }
@@ -54,6 +54,12 @@ void apply_club_leader(MYSQL *conn, const char *logged_id) {
   }
   category_id = cat_ids[choice - 1];
 
+  char major[50] = "";
+  if (category_id == 1) { // 1 is '전공' 카테고리
+      printf("해당 전공 동아리의 전공(학과명)을 입력하세요: ");
+      scanf("%49s", major);
+  }
+
   printf("지도 교수님 이름: ");
   scanf("%49s", professor_name);
   while (getchar() != '\n'); // scanf 직후 입력 버퍼 즉시 비우기 (중요!)
@@ -74,20 +80,31 @@ void apply_club_leader(MYSQL *conn, const char *logged_id) {
   }
 
   // 문자열 SQL 인젝션 방지를 위한 안전한 이스케이프
-  char esc_club_name[200], esc_prof[100], esc_hours[200], esc_desc[600], esc_logged_id[100];
+  char esc_club_name[200], esc_prof[100], esc_hours[200], esc_desc[600], esc_logged_id[100], esc_major[100];
   mysql_real_escape_string(conn, esc_club_name, club_name, strlen(club_name));
   mysql_real_escape_string(conn, esc_prof, professor_name, strlen(professor_name));
   mysql_real_escape_string(conn, esc_hours, operating_hours, strlen(operating_hours));
   mysql_real_escape_string(conn, esc_desc, description, strlen(description));
   mysql_real_escape_string(conn, esc_logged_id, logged_id, strlen(logged_id));
+  if (category_id == 1) {
+      mysql_real_escape_string(conn, esc_major, major, strlen(major));
+  }
 
   // DB에 삽입 (status는 기본값 '대기'로 저장)
   char query[2048];
-  sprintf(query,
-          "INSERT INTO clubs (club_name, category_id, description, professor_name, "
-          "operating_hours, leader_idx, status) "
-          "VALUES ('%s', %d, '%s', '%s', '%s', (SELECT user_idx FROM users WHERE id = '%s'), '대기')",
-          esc_club_name, category_id, esc_desc, esc_prof, esc_hours, esc_logged_id);
+  if (category_id == 1) {
+      sprintf(query,
+              "INSERT INTO clubs (club_name, category_id, major, description, professor_name, "
+              "operating_hours, leader_idx, status) "
+              "VALUES ('%s', %d, '%s', '%s', '%s', '%s', (SELECT user_idx FROM users WHERE id = '%s'), '대기')",
+              esc_club_name, category_id, esc_major, esc_desc, esc_prof, esc_hours, esc_logged_id);
+  } else {
+      sprintf(query,
+              "INSERT INTO clubs (club_name, category_id, description, professor_name, "
+              "operating_hours, leader_idx, status) "
+              "VALUES ('%s', %d, '%s', '%s', '%s', (SELECT user_idx FROM users WHERE id = '%s'), '대기')",
+              esc_club_name, category_id, esc_desc, esc_prof, esc_hours, esc_logged_id);
+  }
 
   if (mysql_query(conn, query)) {
     printf("신청에 실패했습니다: %s\n", mysql_error(conn));
@@ -102,10 +119,10 @@ void apply_club_leader(MYSQL *conn, const char *logged_id) {
 // ─────────────────────────────────────────────
 // 카테고리별 동아리 목록 보기
 // ─────────────────────────────────────────────
-void view_clubs_by_category(MYSQL *conn) {
+void view_clubs_by_category(MYSQL *conn, const char *logged_id) {
   printf("\n=== 동아리 카테고리 목록 ===\n");
   if (mysql_query(conn,
-                  "SELECT category_id, category_name FROM club_categories WHERE category_name != '전공' ORDER BY category_id ASC")) {
+                  "SELECT category_id, category_name FROM club_categories ORDER BY category_id ASC")) {
     printf("카테고리 로딩 실패: %s\n", mysql_error(conn));
     return;
   }
@@ -133,30 +150,8 @@ void view_clubs_by_category(MYSQL *conn) {
   }
   int category_id = cat_ids[choice - 1];
 
-  char query[512];
-  sprintf(query,
-          "SELECT c.club_name, u.id, c.description "
-          "FROM clubs c LEFT JOIN users u ON c.leader_idx = u.user_idx "
-          "WHERE c.category_id = %d AND c.status = '승인'",
-          category_id);
-
-  if (mysql_query(conn, query)) {
-    printf("동아리 목록 로딩 실패: %s\n", mysql_error(conn));
-    return;
-  }
-
-  MYSQL_RES *club_res = mysql_store_result(conn);
-  printf("\n=== 해당 카테고리의 동아리 목록 ===\n");
-  if (mysql_num_rows(club_res) == 0) {
-    printf("현재 이 카테고리에 승인된 동아리가 없습니다.\n");
-  } else {
-    MYSQL_ROW club_row;
-    while ((club_row = mysql_fetch_row(club_res))) {
-      printf("- 동아리명: %s (리더: %s)\n", club_row[0], club_row[1] ? club_row[1] : "없음");
-      printf("  설명: %s\n\n", club_row[2] ? club_row[2] : "");
-    }
-  }
-  mysql_free_result(club_res);
+  // 기존에는 동아리 목록을 보여주었으나, 이제는 해당 카테고리의 게시판으로 직접 이동
+  show_board_menu(conn, category_id, logged_id);
 }
 
 // ─────────────────────────────────────────────
@@ -171,9 +166,8 @@ void home_screen(MYSQL *conn, const char *logged_id) {
     printf("  메인 메뉴\n");
     printf("============================\n");
     printf("1. 동아리 목록 (카테고리별)\n");
-    printf("2. 전공 동아리 게시판\n");
-    printf("3. 마이페이지\n");
-    printf("4. 동아리 개설 신청\n");
+    printf("2. 마이페이지\n");
+    printf("3. 동아리 개설 신청\n");
     printf("0. 로그아웃\n");
     printf("============================\n");
     printf("입력: ");
@@ -181,15 +175,12 @@ void home_screen(MYSQL *conn, const char *logged_id) {
 
     switch (choice) {
     case 1:
-      view_clubs_by_category(conn);
+      view_clubs_by_category(conn, logged_id);
       break;
     case 2:
-      major_club_board(conn, logged_id);
-      break;
-    case 3:
       my_page(conn, logged_id);
       break;
-    case 4:
+    case 3:
       // 신청 기간 확인 후 동아리장 신청 실행
       if (is_apply_period_open(conn)) 
       {   // 신청 기간 열려있음

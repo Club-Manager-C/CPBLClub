@@ -34,12 +34,23 @@ void major_club_board(MYSQL *conn, const char *logged_id) {
 // 게시판 통합 메뉴 루프
 // ─────────────────────────────────────────────
 void show_board_menu(MYSQL *conn, int category_id, const char *logged_id) {
+  char cat_name[100] = "게시판";
+  char query[256];
+  sprintf(query, "SELECT category_name FROM club_categories WHERE category_id = %d", category_id);
+  if (mysql_query(conn, query) == 0) {
+      MYSQL_RES *res = mysql_store_result(conn);
+      if (res && mysql_num_rows(res) > 0) {
+          MYSQL_ROW row = mysql_fetch_row(res);
+          sprintf(cat_name, "%s 게시판", row[0]);
+      }
+      if (res) mysql_free_result(res);
+  }
+
   int choice;
   while (1) {
     if (is_currently_suspended(conn, logged_id)) return;
     printf("\n=========================================\n");
-    printf("   %s\n",
-           category_id == 1 ? "동아리 홍보 게시판" : "전공 동아리 게시판");
+    printf("   %s\n", cat_name);
     printf("=========================================\n");
     get_posts_by_category(conn, category_id);
 
@@ -66,12 +77,7 @@ void show_board_menu(MYSQL *conn, int category_id, const char *logged_id) {
       }
       view_post_detail_menu(conn, post_id, logged_id);
     } else if (choice == 2) {
-      if (category_id == 2 && !is_user_club_leader(conn, logged_id)) {
-        printf("❌ 글 작성 권한이 없습니다. (전공 동아리장만 작성할 수 "
-               "있습니다.)\n");
-      } else {
-        write_post_menu(conn, category_id, logged_id);
-      }
+      write_post_menu(conn, category_id, logged_id);
     } else if (choice == 3) {
       search_board_menu(conn, category_id, logged_id);
     } else {
@@ -179,6 +185,28 @@ void search_board_menu(MYSQL *conn, int category_id, const char *logged_id) {
 // 게시글 작성 화면
 // ─────────────────────────────────────────────
 void write_post_menu(MYSQL *conn, int category_id, const char *logged_id) {
+  // 권한 검증: 현재 카테고리에 속한 동아리의 방장인지 확인하고 club_id 가져오기
+  char auth_query[512];
+  sprintf(auth_query, 
+      "SELECT club_id FROM clubs WHERE leader_idx = (SELECT user_idx FROM users WHERE id = '%s') AND category_id = %d AND status = '승인'", 
+      logged_id, category_id);
+  
+  int club_id = 0;
+  if (mysql_query(conn, auth_query) == 0) {
+      MYSQL_RES *res = mysql_store_result(conn);
+      if (!res || mysql_num_rows(res) == 0) {
+          if (res) mysql_free_result(res);
+          printf("\n❌ 작성 권한이 없습니다. 해당 카테고리에 속한 동아리의 방장만 게시글을 작성할 수 있습니다.\n");
+          return;
+      }
+      MYSQL_ROW row = mysql_fetch_row(res);
+      club_id = atoi(row[0]);
+      mysql_free_result(res);
+  } else {
+      printf("\n❌ 권한 확인 중 오류가 발생했습니다.\n");
+      return;
+  }
+
   char title[200];
   char content[1000];
 
@@ -200,7 +228,7 @@ void write_post_menu(MYSQL *conn, int category_id, const char *logged_id) {
     return;
   }
 
-  if (insert_post(conn, logged_id, category_id, title, content)) {
+  if (insert_post(conn, club_id, logged_id, category_id, title, content)) {
     printf("✅ 글이 성공적으로 등록되었습니다!\n");
   } else {
     printf("❌ 글 등록에 실패했습니다.\n");
@@ -213,7 +241,7 @@ void write_post_menu(MYSQL *conn, int category_id, const char *logged_id) {
 int print_post_detail(MYSQL *conn, int post_id) {
   char query[512];
   sprintf(query,
-          "SELECT p.title, p.content, u.nickname, p.created_at "
+          "SELECT p.title, p.content, u.nickname, p.created_at, p.like_count "
           "FROM posts p JOIN users u ON p.user_idx = u.user_idx "
           "WHERE p.post_id = %d",
           post_id);
@@ -230,7 +258,7 @@ int print_post_detail(MYSQL *conn, int post_id) {
   MYSQL_ROW row = mysql_fetch_row(res);
   printf("\n==================================================\n");
   printf(" 제목: %s\n", row[0]);
-  printf(" 작성자: %s | 작성일: %s\n", row[2], row[3]);
+  printf(" 작성자: %s | 작성일: %s | 좋아요: %s\n", row[2], row[3], row[4]);
   printf("--------------------------------------------------\n");
   printf(" %s\n", row[1]);
   printf("==================================================\n");
@@ -243,6 +271,20 @@ int print_post_detail(MYSQL *conn, int post_id) {
 // ─────────────────────────────────────────────
 void view_post_detail_menu(MYSQL *conn, int post_id, const char *logged_id) {
   int choice;
+
+  // 게시글이 속한 club_id 조회
+  int club_id = 0;
+  char query[256];
+  sprintf(query, "SELECT club_id FROM posts WHERE post_id = %d", post_id);
+  if (mysql_query(conn, query) == 0) {
+      MYSQL_RES *res = mysql_store_result(conn);
+      if (res && mysql_num_rows(res) > 0) {
+          MYSQL_ROW row = mysql_fetch_row(res);
+          club_id = atoi(row[0]);
+      }
+      if (res) mysql_free_result(res);
+  }
+
   while (1) {
     if (is_currently_suspended(conn, logged_id)) return;
     if (!print_post_detail(conn, post_id)) {
@@ -252,6 +294,8 @@ void view_post_detail_menu(MYSQL *conn, int post_id, const char *logged_id) {
 
     printf("1) 댓글 확인\n");
     printf("2) 댓글 작성\n");
+    printf("3) 게시글 좋아요\n");
+    printf("4) 동아리 가입 신청\n");
     printf("0) 뒤로가기\n");
     printf("입력: ");
     if (scanf("%d", &choice) != 1) {
@@ -262,6 +306,16 @@ void view_post_detail_menu(MYSQL *conn, int post_id, const char *logged_id) {
 
     if (choice == 0) {
       break;
+    } else if (choice == 3) {
+      if (like_post(conn, post_id, logged_id)) {
+        printf("✅ 게시글에 좋아요를 눌렀습니다!\n");
+      }
+    } else if (choice == 4) {
+      if (club_id > 0) {
+        apply_for_club(conn, club_id, logged_id);
+      } else {
+        printf("❌ 동아리 정보를 찾을 수 없습니다.\n");
+      }
     } else if (choice == 1) {
       int comment_ids[100];
       int comment_count = 0;
@@ -501,4 +555,72 @@ void view_comment_detail_menu(MYSQL *conn, int comment_id,
       printf("잘못된 입력입니다.\n");
     }
   }
+}
+
+void apply_for_club(MYSQL *conn, int club_id, const char *logged_id) {
+    char query[1024];
+    
+    // 1. 가입자의 전공, 타겟 동아리의 카테고리(전공 여부) 및 동아리의 명시적 전공 조회
+    sprintf(query, 
+        "SELECT c.category_id, c.major, u_applicant.major "
+        "FROM clubs c "
+        "JOIN users u_applicant ON u_applicant.id = '%s' "
+        "WHERE c.club_id = %d", logged_id, club_id);
+        
+    if (mysql_query(conn, query)) { 
+        fprintf(stderr, "조회 실패: %s\n", mysql_error(conn));
+        return; 
+    }
+    
+    MYSQL_RES *res = mysql_store_result(conn);
+    if (!res || mysql_num_rows(res) == 0) {
+        if(res) mysql_free_result(res);
+        printf("❌ 동아리 정보를 찾을 수 없습니다.\n");
+        return;
+    }
+
+    MYSQL_ROW row = mysql_fetch_row(res);
+    int category_id = atoi(row[0]);
+    const char *club_major = row[1];
+    const char *my_major = row[2];
+    
+    // 카테고리가 1(전공 동아리)일 경우 전공 일치 여부 확인
+    if (category_id == 1) {
+        if (strcmp(club_major, my_major) != 0) {
+            printf("❌ 가입 실패: 해당 동아리의 전공(%s)과 본인의 전공(%s)이 일치하지 않아 신청할 수 없습니다.\n", club_major, my_major);
+            mysql_free_result(res);
+            return;
+        }
+    }
+    mysql_free_result(res);
+
+    // 2. 기존 가입 신청 여부 확인
+    sprintf(query, "SELECT 1 FROM joinrequests WHERE club_id = %d AND user_idx = (SELECT user_idx FROM users WHERE id='%s')", club_id, logged_id);
+    if (mysql_query(conn, query) == 0) {
+        MYSQL_RES *chk_res = mysql_store_result(conn);
+        if (chk_res && mysql_num_rows(chk_res) > 0) {
+            printf("⚠️ 이미 이 동아리에 가입 신청을 하셨습니다.\n");
+            mysql_free_result(chk_res);
+            return;
+        }
+        if (chk_res) mysql_free_result(chk_res);
+    }
+    
+    // 3. 가입 동기 입력
+    char intro[500];
+    printf("가입 동기(자기소개)를 입력하세요: ");
+    while(getchar() != '\n'); // 버퍼 비우기
+    fgets(intro, sizeof(intro), stdin);
+    intro[strcspn(intro, "\n")] = '\0';
+    
+    // 4. joinrequests 테이블에 INSERT 진행
+    char esc_intro[1000];
+    mysql_real_escape_string(conn, esc_intro, intro, strlen(intro));
+
+    sprintf(query, "INSERT INTO joinrequests (club_id, user_idx, introduction) VALUES (%d, (SELECT user_idx FROM users WHERE id='%s'), '%s')", club_id, logged_id, esc_intro);
+    if (mysql_query(conn, query)) {
+        fprintf(stderr, "❌ 신청 실패: %s\n", mysql_error(conn));
+    } else {
+        printf("✅ 성공적으로 가입 신청이 접수되었습니다!\n");
+    }
 }
