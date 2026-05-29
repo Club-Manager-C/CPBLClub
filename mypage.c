@@ -163,9 +163,9 @@ static void my_schedule_menu(MYSQL *conn, const char *logged_id) {
 void viewMyMessages(MYSQL *conn, const char *logged_id) {
   printf("\n=== 📬 메시지함 ===\n");
 
-  char query[512];
+  char query[1024];
   sprintf(query,
-          "SELECT m.message_id, m.contented_at, m.is_read, m.sent_at "
+          "SELECT m.message_id, m.contented_at, m.is_read, m.sent_at, m.msg_type, m.sender_info "
           "FROM messages m JOIN users u ON m.receiver_idx = u.user_idx "
           "WHERE u.id = '%s' "
           "ORDER BY m.sent_at DESC",
@@ -189,15 +189,21 @@ void viewMyMessages(MYSQL *conn, const char *logged_id) {
     return;
   }
 
-  printf("%-8s %-50s %-10s %-20s\n", "메시지ID", "내용", "읽음상태",
-         "수신일시");
-  printf("---------------------------------------------------------------------"
-         "-------------------\n");
-
+  printf("----------------------------------------------------------------------------------------\n");
   MYSQL_ROW row;
   while ((row = mysql_fetch_row(res))) {
-    const char *is_read_str = (atoi(row[2]) == 1) ? "읽음" : "안읽음";
-    printf("%-8s %-50s %-10s %-20s\n", row[0], row[1], is_read_str, row[3]);
+    const char *is_read_str = (atoi(row[2]) == 1) ? "[읽음]" : "[안읽음]";
+    int msg_type = row[4] ? atoi(row[4]) : 1;
+    const char *sender_info = row[5] ? row[5] : "System";
+    
+    char prefix[20];
+    if (msg_type == 0) {
+        strcpy(prefix, "[공지]");
+    } else {
+        strcpy(prefix, "[쪽지]");
+    }
+    
+    printf("%s %-10s 발신: %-15s | 내용: %s | 수신일: %s\n", is_read_str, prefix, sender_info, row[1], row[3]);
   }
   mysql_free_result(res);
 
@@ -218,6 +224,81 @@ void viewMyMessages(MYSQL *conn, const char *logged_id) {
   scanf("%49s", dummy);
 }
 
+void send_dm_menu(MYSQL *conn, const char *logged_id) {
+    char receiver_id[100];
+    char content[1024];
+
+    printf("\n--- 쪽지 보내기 ---\n");
+    printf("받는 사람 ID: ");
+    scanf("%99s", receiver_id);
+    getchar(); // 버퍼 비우기
+
+    printf("쪽지 내용 입력 (최대 1000자): ");
+    fgets(content, sizeof(content), stdin);
+    content[strcspn(content, "\r\n")] = '\0'; // 개행 문자 제거
+
+    if (strlen(content) == 0) {
+        printf("⚠️ 쪽지 내용을 입력해주세요.\n");
+        return;
+    }
+
+    send_direct_message(conn, logged_id, receiver_id, content);
+}
+
+void send_announcement_menu(MYSQL *conn, const char *logged_id) {
+    int club_id;
+    char content[1024];
+
+    printf("\n--- 단체 공지 발송 (동아리장 전용) ---\n");
+
+    char query[512];
+    char esc_logged_id[100];
+    mysql_real_escape_string(conn, esc_logged_id, logged_id, strlen(logged_id));
+
+    // 사용자가 방장인 동아리 목록 출력
+    sprintf(query, 
+            "SELECT c.club_id, c.club_name FROM clubs c "
+            "JOIN clubmembers cm ON c.club_id = cm.club_id "
+            "JOIN users u ON cm.user_idx = u.user_idx "
+            "WHERE u.id = '%s' AND cm.role = 'Leader'", esc_logged_id);
+    
+    if (mysql_query(conn, query) == 0) {
+        MYSQL_RES *res = mysql_store_result(conn);
+        if (res && mysql_num_rows(res) > 0) {
+            printf("[내 관리 동아리 목록]\n");
+            MYSQL_ROW row;
+            while ((row = mysql_fetch_row(res))) {
+                printf(" - ID: %s | 동아리명: %s\n", row[0], row[1]);
+            }
+            mysql_free_result(res);
+            printf("--------------------------------------\n");
+        } else {
+            if (res) mysql_free_result(res);
+            printf("⚠️ 현재 동아리장으로 관리 중인 동아리가 없습니다.\n");
+            return;
+        }
+    }
+
+    printf("공지를 발송할 동아리 ID(숫자): ");
+    if (scanf("%d", &club_id) != 1) {
+        printf("⚠️ 잘못된 입력입니다. 동아리 ID는 숫자로 입력해주세요.\n");
+        while (getchar() != '\n'); // 버퍼 비우기
+        return;
+    }
+    getchar(); // 버퍼 비우기
+
+    printf("공지 내용 입력 (최대 1000자): ");
+    fgets(content, sizeof(content), stdin);
+    content[strcspn(content, "\r\n")] = '\0';
+
+    if (strlen(content) == 0) {
+        printf("⚠️ 공지 내용을 입력해주세요.\n");
+        return;
+    }
+
+    send_club_announcement(conn, club_id, logged_id, content);
+}
+
 // ─────────────────────────────────────────────
 // 마이페이지 메인
 // ─────────────────────────────────────────────
@@ -233,20 +314,22 @@ void my_page(MYSQL *conn, const char *logged_id) {
     printf("1. 내 게시글 확인/수정\n");
     printf("2. 내 댓글 확인/수정\n");
     printf("3. 메시지함\n");
-    printf("4. 시간표 확인/수정\n");
+    printf("4. 쪽지 보내기\n");
+    printf("5. 단체 공지 발송 (동아리장)\n");
+    printf("6. 시간표 확인/수정\n");
     printf("0. 뒤로\n");
     printf("============================\n");
     printf("입력: ");
     scanf("%d", &choice);
+    getchar();
 
     switch (choice) {
       case 1: my_posts_menu(conn, logged_id);    break;
       case 2: my_comments_menu(conn, logged_id); break;
-      case 3: {
-        viewMyMessages(conn, logged_id);
-        break;
-      }
-      case 4: my_schedule_menu(conn, logged_id); break;
+      case 3: viewMyMessages(conn, logged_id);   break;
+      case 4: send_dm_menu(conn, logged_id);     break;
+      case 5: send_announcement_menu(conn, logged_id); break;
+      case 6: my_schedule_menu(conn, logged_id); break;
       case 0: return;
       default: printf("잘못된 입력입니다.\n");
     }
