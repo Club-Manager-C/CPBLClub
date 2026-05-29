@@ -11,5 +11,6 @@ void major_club_board(MYSQL *conn, const char *logged_id);
 
 // 게시글 상세 메뉴 (공유용)
 void view_post_detail_menu(MYSQL *conn, int post_id, const char *logged_id);
+int is_string_whitespace_only(const char *str);
 
 #endif // BOARD_H

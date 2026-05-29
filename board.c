@@ -13,6 +13,8 @@ void get_post_comments_list(MYSQL *conn, int post_id, int *comment_ids_out,
                             int *comment_count_out);
 void view_comment_detail_menu(MYSQL *conn, int comment_id,
                               const char *logged_id);
+void search_board_menu(MYSQL *conn, int category_id, const char *logged_id);
+int is_string_whitespace_only(const char *str);
 
 // ─────────────────────────────────────────────
 // 동아리 홍보 게시판 (카테고리 ID 1)
@@ -43,6 +45,7 @@ void show_board_menu(MYSQL *conn, int category_id, const char *logged_id) {
 
     printf("\n1. 글 상세 보기\n");
     printf("2. 글 작성\n");
+    printf("3. 게시글 검색\n");
     printf("0. 뒤로가기\n");
     printf("입력: ");
     if (scanf("%d", &choice) != 1) {
@@ -69,8 +72,105 @@ void show_board_menu(MYSQL *conn, int category_id, const char *logged_id) {
       } else {
         write_post_menu(conn, category_id, logged_id);
       }
+    } else if (choice == 3) {
+      search_board_menu(conn, category_id, logged_id);
     } else {
       printf("잘못된 입력입니다.\n");
+    }
+  }
+}
+
+int is_string_whitespace_only(const char *str) {
+  if (str == NULL || strlen(str) == 0) return 1;
+  for (int i = 0; str[i] != '\0'; i++) {
+    if (str[i] != ' ' && str[i] != '\t' && str[i] != '\r' && str[i] != '\n') {
+      return 0; // 공백이 아닌 문자가 최소 하나 이상 포함됨
+    }
+  }
+  return 1; // 모든 문자가 공백 문자
+}
+
+void search_board_menu(MYSQL *conn, int category_id, const char *logged_id) {
+  char keyword[100];
+  int choice;
+
+  while (1) {
+    if (is_currently_suspended(conn, logged_id)) return;
+
+    printf("\n검색할 키워드를 입력하세요 (최대 30자): ");
+    while (getchar() != '\n'); // 이전 입력 버퍼 비우기 (중요!)
+
+    if (fgets(keyword, sizeof(keyword), stdin) == NULL) {
+      printf("입력 오류가 발생했습니다.\n");
+      return;
+    }
+
+    // 개행 문자 제거
+    keyword[strcspn(keyword, "\n")] = '\0';
+
+    // 30자 초과 시 자르기
+    if (strlen(keyword) > 30) {
+      keyword[30] = '\0';
+    }
+
+    // 공백 입력 예외 처리
+    if (is_string_whitespace_only(keyword)) {
+      printf("\n❌ 검색어에 공백만 입력할 수 없습니다.\n");
+      return;
+    }
+
+    // DB 조회 및 결과에 따른 하위 분기 루프
+    while (1) {
+      if (is_currently_suspended(conn, logged_id)) return;
+
+      int result_count = search_posts_by_keyword(conn, category_id, keyword);
+
+      if (result_count > 0) {
+        // Case A: 검색 결과가 있을 때
+        printf("\n1. 게시글 상세 보기\n");
+        printf("0. 뒤로 가기\n");
+        printf("선택: ");
+        if (scanf("%d", &choice) != 1) {
+          while (getchar() != '\n'); // 버퍼 비우기
+          printf("잘못된 입력입니다.\n");
+          continue;
+        }
+
+        if (choice == 1) {
+          int post_id;
+          printf("조회할 글 ID(번호) 입력: ");
+          if (scanf("%d", &post_id) != 1) {
+            while (getchar() != '\n');
+            printf("잘못된 번호입니다.\n");
+            continue;
+          }
+          view_post_detail_menu(conn, post_id, logged_id);
+          // 상세보기 이후 다시 루프를 돌며 검색 결과 및 메뉴를 계속 보여줌
+        } else if (choice == 0) {
+          return; // 검색 화면 종료 및 메인 메뉴로 복귀
+        } else {
+          printf("잘못된 메뉴 번호입니다.\n");
+        }
+      } else {
+        // Case B: 검색 결과가 없을 때 (해당 검색어를 포함하는 게시글이 없습니다.)
+        printf("\n❌ 해당 검색어를 포함하는 게시글이 없습니다.\n");
+        printf("\n1. 다시 검색\n");
+        printf("0. 뒤로 가기\n");
+        printf("선택: ");
+        if (scanf("%d", &choice) != 1) {
+          while (getchar() != '\n'); // 버퍼 비우기
+          printf("잘못된 입력입니다.\n");
+          continue;
+        }
+
+        if (choice == 1) {
+          break; // 안쪽 루프를 깨고 바깥쪽 검색어 입력 단계로 회귀
+        } else if (choice == 0) {
+          return; // 검색 화면 종료 및 메인 메뉴로 복귀
+        } else {
+          printf("잘못된 메뉴 번호입니다.\n");
+        }
+      }
     }
   }
 }
