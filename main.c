@@ -2,6 +2,7 @@
 #include "board.h"
 #include "db.h"
 #include "mypage.h"
+#include "apply_period.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -180,7 +181,15 @@ void home_screen(MYSQL *conn, const char *logged_id) {
       my_page(conn, logged_id);
       break;
     case 4:
-      apply_club_leader(conn, logged_id);
+      // 신청 기간 확인 후 동아리장 신청 실행
+      if (is_apply_period_open(conn)) 
+      {   // 신청 기간 열려있음
+          apply_club_leader(conn, logged_id);
+
+      } else {
+          // 신청 기간 아님
+          printf("\n현재는 동아리 등록 신청 기간이 아닙니다.\n");
+      }
       break;
     case 0:
       printf("로그아웃 합니다.\n");
@@ -206,6 +215,7 @@ int main() {
     printf("1. 로그인\n");
     printf("2. 회원가입\n");
     printf("0. 종료\n");
+    printf("=====================\n");
     printf("입력: ");
     scanf("%d", &choice);
 

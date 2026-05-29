@@ -21,6 +21,7 @@
                 "clube_manage.c",
                 "category.c",
                 "filter.c",
+                "apply_period.c",
                 "-o",
                 "CPBL.exe",
                 "-I",
