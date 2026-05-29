@@ -147,6 +147,10 @@ void init_db(MYSQL **conn) {
                      "FOREIGN KEY (receiver_idx) REFERENCES users (user_idx) "
                      "ON DELETE CASCADE)");
 
+  // 마이그레이션: 메시지 테이블에 쪽지/공지 구분을 위한 필드 추가
+  mysql_query(*conn, "ALTER TABLE messages ADD COLUMN msg_type TINYINT DEFAULT 1");
+  mysql_query(*conn, "ALTER TABLE messages ADD COLUMN sender_info VARCHAR(50) DEFAULT 'System'");
+
   // ⑩ 댓글 테이블 (대댓글 구조 포함)
   mysql_query(
       *conn,
@@ -853,6 +857,127 @@ int increment_bad_word_count(MYSQL *conn, const char *user_id) {
         }
     }
     return 0;
+}
+
+// ─────────────────────────────────────────────────
+// 신규 메시지 기능 (공지 및 1:1 쪽지)
+// ─────────────────────────────────────────────────
+
+int send_club_announcement(MYSQL *conn, int club_id, const char *leader_id, const char *content) {
+    char query[2048];
+    char esc_leader_id[100];
+    mysql_real_escape_string(conn, esc_leader_id, leader_id, strlen(leader_id));
+
+    // 1. 권한 검증: leader_id가 club_id의 OWNER 인지 확인
+    sprintf(query, "SELECT cm.role FROM clubmembers cm JOIN users u ON cm.user_idx = u.user_idx WHERE cm.club_id = %d AND u.id = '%s'", club_id, esc_leader_id);
+    if (mysql_query(conn, query)) {
+        fprintf(stderr, "권한 조회 실패: %s\n", mysql_error(conn));
+        return 0;
+    }
+    MYSQL_RES *res = mysql_store_result(conn);
+    int is_owner = 0;
+    if (res && mysql_num_rows(res) > 0) {
+        MYSQL_ROW row = mysql_fetch_row(res);
+        if (strcmp(row[0], "Leader") == 0) {
+            is_owner = 1;
+        }
+    }
+    if (res) mysql_free_result(res);
+
+    if (!is_owner) {
+        printf("⚠️ 권한이 없습니다. 동아리장만 공지를 발송할 수 있습니다.\n");
+        return 0;
+    }
+
+    char esc_content[1024];
+    mysql_real_escape_string(conn, esc_content, content, strlen(content));
+
+    // 동아리 이름 조회
+    char club_name[100] = "System";
+    sprintf(query, "SELECT club_name FROM clubs WHERE club_id = %d", club_id);
+    if (mysql_query(conn, query) == 0) {
+        res = mysql_store_result(conn);
+        if (res) {
+            MYSQL_ROW row = mysql_fetch_row(res);
+            if (row) strcpy(club_name, row[0]);
+            mysql_free_result(res);
+        }
+    }
+    char esc_club_name[200];
+    mysql_real_escape_string(conn, esc_club_name, club_name, strlen(club_name));
+
+    // 동아리 소속 회원 조회 (승인된 회원 모두)
+    sprintf(query, "SELECT user_idx FROM clubmembers WHERE club_id = %d", club_id);
+    if (mysql_query(conn, query)) {
+        fprintf(stderr, "회원 조회 실패: %s\n", mysql_error(conn));
+        return 0;
+    }
+
+    res = mysql_store_result(conn);
+    if (!res) return 0;
+
+    int success_count = 0;
+    MYSQL_ROW row;
+    while ((row = mysql_fetch_row(res))) {
+        int target_idx = atoi(row[0]);
+        char insert_query[1024];
+        // msg_type = 0 (ANNOUNCEMENT)
+        sprintf(insert_query, 
+                "INSERT INTO messages (receiver_idx, contented_at, msg_type, sender_info) "
+                "VALUES (%d, '%s', 0, '%s')", 
+                target_idx, esc_content, esc_club_name);
+        if (mysql_query(conn, insert_query) == 0) {
+            success_count++;
+        }
+    }
+    mysql_free_result(res);
+
+    printf("✅ 총 %d명의 회원에게 단체 공지를 발송했습니다.\n", success_count);
+    return 1;
+}
+
+int send_direct_message(MYSQL *conn, const char *sender_id, const char *receiver_id, const char *content) {
+    char esc_receiver_id[100];
+    mysql_real_escape_string(conn, esc_receiver_id, receiver_id, strlen(receiver_id));
+    
+    // 1. users 테이블에서 receiver_id 존재 여부 확인
+    char query[512];
+    sprintf(query, "SELECT user_idx FROM users WHERE id = '%s'", esc_receiver_id);
+    if (mysql_query(conn, query)) {
+        fprintf(stderr, "수신자 조회 실패: %s\n", mysql_error(conn));
+        return 0;
+    }
+
+    MYSQL_RES *res = mysql_store_result(conn);
+    if (!res || mysql_num_rows(res) == 0) {
+        printf("❌ 존재하지 않는 사용자입니다.\n");
+        if (res) mysql_free_result(res);
+        return 0;
+    }
+    MYSQL_ROW row = mysql_fetch_row(res);
+    int target_idx = atoi(row[0]);
+    mysql_free_result(res);
+
+    char esc_content[1024];
+    mysql_real_escape_string(conn, esc_content, content, strlen(content));
+    
+    char esc_sender_id[100];
+    mysql_real_escape_string(conn, esc_sender_id, sender_id, strlen(sender_id));
+
+    // 2. messages 테이블에 INSERT (msg_type = 1 (DM))
+    char insert_query[1024];
+    sprintf(insert_query, 
+            "INSERT INTO messages (receiver_idx, contented_at, msg_type, sender_info) "
+            "VALUES (%d, '%s', 1, '%s')", 
+            target_idx, esc_content, esc_sender_id);
+            
+    if (mysql_query(conn, insert_query)) {
+        fprintf(stderr, "❌ 메시지 전송 실패: %s\n", mysql_error(conn));
+        return 0;
+    }
+
+    printf("✅ 쪽지를 성공적으로 전송했습니다.\n");
+    return 1;
 }
 
 int is_currently_suspended(MYSQL *conn, const char *user_id) {

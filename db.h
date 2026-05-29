@@ -45,5 +45,7 @@ int add_schedule(MYSQL *conn, const char *user_id, const char *day,
                  const char *location);
 int delete_schedule(MYSQL *conn, int schedule_id, const char *user_id);
 void display_my_profile(MYSQL *conn, const char *logged_id);
+int send_club_announcement(MYSQL *conn, int club_id, const char *leader_id, const char *content);
+int send_direct_message(MYSQL *conn, const char *sender_id, const char *receiver_id, const char *content);
 
 #endif // DB_H
