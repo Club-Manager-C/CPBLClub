@@ -16,6 +16,8 @@ void close_db(MYSQL *conn);
 int insert_message(MYSQL *conn, const char *user_id, const char *content);
 int get_user_idx_by_id(MYSQL *conn, const char *user_id);
 int is_user_club_leader(MYSQL *conn, const char *user_id);
+int increment_bad_word_count(MYSQL *conn, const char *user_id);
+int is_currently_suspended(MYSQL *conn, const char *user_id);
 
 // ── 게시글 ──────────────────────────────────────
 void get_my_posts(MYSQL *conn, const char *user_id);
