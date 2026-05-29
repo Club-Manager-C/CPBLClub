@@ -1,12 +1,12 @@
 #include "db.h"
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdbool.h>
 
 const char *DB_HOST = "localhost";
 const char *DB_USER = "root";
-const char *DB_PW = "rds12003!";
+const char *DB_PW = "kim7479050810#";
 const char *DB_NAME = "cpbl_db";
 
 void init_db(MYSQL **conn) {
@@ -20,7 +20,8 @@ void init_db(MYSQL **conn) {
   enum mysql_ssl_mode ssl_mode = SSL_MODE_DISABLED;
   mysql_options(*conn, MYSQL_OPT_SSL_MODE, &ssl_mode);
 
-  if (mysql_real_connect(*conn, DB_HOST, DB_USER, DB_PW, NULL, 3306, NULL, 0) == NULL) {
+  if (mysql_real_connect(*conn, DB_HOST, DB_USER, DB_PW, NULL, 3306, NULL, 0) ==
+      NULL) {
     fprintf(stderr, "MySQL 연결 실패: %s\n", mysql_error(*conn));
     exit(1);
   }
@@ -60,30 +61,35 @@ void init_db(MYSQL **conn) {
                      "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
 
   // ④ 동아리 테이블 (leader_idx를 통해 현재 주인 식별)
-  mysql_query(*conn, "CREATE TABLE IF NOT EXISTS clubs ("
-                     "club_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, "
-                     "club_name VARCHAR(50) NOT NULL UNIQUE, "
-                     "category_id INT NOT NULL, "
-                     "description TEXT NULL, "
-                     "professor_name VARCHAR(20) NULL, "
-                     "operating_hours VARCHAR(100) NULL, "
-                     "status ENUM('대기', '승인', '거절') DEFAULT '대기', "
-                     "reject_reason VARCHAR(255) NULL, "
-                     "leader_idx INT NULL, "
-                     "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
-                     "FOREIGN KEY (category_id) REFERENCES club_categories (category_id), "
-                     "FOREIGN KEY (leader_idx) REFERENCES users (user_idx) ON DELETE SET NULL)");
+  mysql_query(
+      *conn,
+      "CREATE TABLE IF NOT EXISTS clubs ("
+      "club_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, "
+      "club_name VARCHAR(50) NOT NULL UNIQUE, "
+      "category_id INT NOT NULL, "
+      "description TEXT NULL, "
+      "professor_name VARCHAR(20) NULL, "
+      "operating_hours VARCHAR(100) NULL, "
+      "status ENUM('대기', '승인', '거절') DEFAULT '대기', "
+      "reject_reason VARCHAR(255) NULL, "
+      "leader_idx INT NULL, "
+      "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
+      "FOREIGN KEY (category_id) REFERENCES club_categories (category_id), "
+      "FOREIGN KEY (leader_idx) REFERENCES users (user_idx) ON DELETE SET "
+      "NULL)");
 
   // ⑤ 동아리 멤버 테이블 (N:M 관계 해소 및 마이페이지 직책 표시용)
-  mysql_query(*conn, "CREATE TABLE IF NOT EXISTS clubmembers ("
-                     "membership_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, "
-                     "club_id INT NOT NULL, "
-                     "user_idx INT NOT NULL, "
-                     "role ENUM('Member', 'Leader') DEFAULT 'Member', "
-                     "joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
-                     "UNIQUE KEY unique_membership (club_id, user_idx), "
-                     "FOREIGN KEY (club_id) REFERENCES clubs (club_id) ON DELETE CASCADE, "
-                     "FOREIGN KEY (user_idx) REFERENCES users (user_idx) ON DELETE CASCADE)");
+  mysql_query(
+      *conn,
+      "CREATE TABLE IF NOT EXISTS clubmembers ("
+      "membership_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, "
+      "club_id INT NOT NULL, "
+      "user_idx INT NOT NULL, "
+      "role ENUM('Member', 'Leader') DEFAULT 'Member', "
+      "joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
+      "UNIQUE KEY unique_membership (club_id, user_idx), "
+      "FOREIGN KEY (club_id) REFERENCES clubs (club_id) ON DELETE CASCADE, "
+      "FOREIGN KEY (user_idx) REFERENCES users (user_idx) ON DELETE CASCADE)");
 
   // ⑥ 게시판 타입 테이블 (운영 정책 반영)
   mysql_query(*conn, "CREATE TABLE IF NOT EXISTS boardtype ("
@@ -92,32 +98,36 @@ void init_db(MYSQL **conn) {
                      "min_role ENUM('Member', 'Leader') DEFAULT 'Member')");
 
   // ⑦ 게시글 테이블 (동아리나 사용자 삭제 시 관련 글 자동 삭제)
-  mysql_query(*conn, "CREATE TABLE IF NOT EXISTS posts ("
-                     "post_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, "
-                     "club_id INT NOT NULL, "
-                     "user_idx INT NOT NULL, "
-                     "type_id INT NOT NULL, "
-                     "title VARCHAR(255) NOT NULL, "
-                     "content TEXT NOT NULL, "
-                     "view_count INT DEFAULT 0, "
-                     "like_count INT DEFAULT 0, "
-                     "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
-                     "FOREIGN KEY (club_id) REFERENCES clubs (club_id) ON DELETE CASCADE, "
-                     "FOREIGN KEY (user_idx) REFERENCES users (user_idx) ON DELETE CASCADE, "
-                     "FOREIGN KEY (type_id) REFERENCES boardtype (type_id))");
+  mysql_query(
+      *conn,
+      "CREATE TABLE IF NOT EXISTS posts ("
+      "post_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, "
+      "club_id INT NOT NULL, "
+      "user_idx INT NOT NULL, "
+      "type_id INT NOT NULL, "
+      "title VARCHAR(255) NOT NULL, "
+      "content TEXT NOT NULL, "
+      "view_count INT DEFAULT 0, "
+      "like_count INT DEFAULT 0, "
+      "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
+      "FOREIGN KEY (club_id) REFERENCES clubs (club_id) ON DELETE CASCADE, "
+      "FOREIGN KEY (user_idx) REFERENCES users (user_idx) ON DELETE CASCADE, "
+      "FOREIGN KEY (type_id) REFERENCES boardtype (type_id))");
 
   // ⑧ 가입 신청 테이블 (등록 기간 연동 및 승인 로직용)
-  mysql_query(*conn, "CREATE TABLE IF NOT EXISTS joinrequests ("
-                     "request_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, "
-                     "club_id INT NOT NULL, "
-                     "user_idx INT NOT NULL, "
-                     "introduction TEXT NOT NULL, "
-                     "status ENUM('대기', '승인', '거절') DEFAULT '대기', "
-                     "period_id INT NULL, "
-                     "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
-                     "FOREIGN KEY (club_id) REFERENCES clubs (club_id) ON DELETE CASCADE, "
-                     "FOREIGN KEY (user_idx) REFERENCES users (user_idx) ON DELETE CASCADE, "
-                     "FOREIGN KEY (period_id) REFERENCES recruitment_periods (period_id))");
+  mysql_query(
+      *conn,
+      "CREATE TABLE IF NOT EXISTS joinrequests ("
+      "request_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, "
+      "club_id INT NOT NULL, "
+      "user_idx INT NOT NULL, "
+      "introduction TEXT NOT NULL, "
+      "status ENUM('대기', '승인', '거절') DEFAULT '대기', "
+      "period_id INT NULL, "
+      "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
+      "FOREIGN KEY (club_id) REFERENCES clubs (club_id) ON DELETE CASCADE, "
+      "FOREIGN KEY (user_idx) REFERENCES users (user_idx) ON DELETE CASCADE, "
+      "FOREIGN KEY (period_id) REFERENCES recruitment_periods (period_id))");
 
   // ⑨ 메시지/알림함 테이블 (개설 및 가입 승인 알림용)
   mysql_query(*conn, "CREATE TABLE IF NOT EXISTS messages ("
@@ -126,27 +136,34 @@ void init_db(MYSQL **conn) {
                      "contented_at TEXT NOT NULL, "
                      "is_read TINYINT(1) DEFAULT 0, "
                      "sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
-                     "FOREIGN KEY (receiver_idx) REFERENCES users (user_idx) ON DELETE CASCADE)");
+                     "FOREIGN KEY (receiver_idx) REFERENCES users (user_idx) "
+                     "ON DELETE CASCADE)");
 
   // ⑩ 댓글 테이블 (대댓글 구조 포함)
-  mysql_query(*conn, "CREATE TABLE IF NOT EXISTS comments ("
-                     "comment_id INT AUTO_INCREMENT PRIMARY KEY, "
-                     "post_id INT NOT NULL, "
-                     "user_idx INT NOT NULL, "
-                     "content TEXT NOT NULL, "
-                     "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
-                     "parent_comment_id INT DEFAULT NULL, "
-                     "FOREIGN KEY (post_id) REFERENCES posts (post_id) ON DELETE CASCADE, "
-                     "FOREIGN KEY (user_idx) REFERENCES users (user_idx) ON DELETE CASCADE, "
-                     "FOREIGN KEY (parent_comment_id) REFERENCES comments (comment_id) ON DELETE CASCADE)");
+  mysql_query(
+      *conn,
+      "CREATE TABLE IF NOT EXISTS comments ("
+      "comment_id INT AUTO_INCREMENT PRIMARY KEY, "
+      "post_id INT NOT NULL, "
+      "user_idx INT NOT NULL, "
+      "content TEXT NOT NULL, "
+      "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
+      "parent_comment_id INT DEFAULT NULL, "
+      "FOREIGN KEY (post_id) REFERENCES posts (post_id) ON DELETE CASCADE, "
+      "FOREIGN KEY (user_idx) REFERENCES users (user_idx) ON DELETE CASCADE, "
+      "FOREIGN KEY (parent_comment_id) REFERENCES comments (comment_id) ON "
+      "DELETE CASCADE)");
 
   // ⑩-1. 댓글 좋아요 테이블 생성
-  mysql_query(*conn, "CREATE TABLE IF NOT EXISTS comment_likes ("
-                     "comment_id INT NOT NULL, "
-                     "user_idx INT NOT NULL, "
-                     "PRIMARY KEY (comment_id, user_idx), "
-                     "FOREIGN KEY (comment_id) REFERENCES comments (comment_id) ON DELETE CASCADE, "
-                     "FOREIGN KEY (user_idx) REFERENCES users (user_idx) ON DELETE CASCADE)");
+  mysql_query(
+      *conn,
+      "CREATE TABLE IF NOT EXISTS comment_likes ("
+      "comment_id INT NOT NULL, "
+      "user_idx INT NOT NULL, "
+      "PRIMARY KEY (comment_id, user_idx), "
+      "FOREIGN KEY (comment_id) REFERENCES comments (comment_id) ON DELETE "
+      "CASCADE, "
+      "FOREIGN KEY (user_idx) REFERENCES users (user_idx) ON DELETE CASCADE)");
 
   // ⑪ 비속어 필터링 테이블
   mysql_query(*conn, "CREATE TABLE IF NOT EXISTS filterwords ("
@@ -154,35 +171,46 @@ void init_db(MYSQL **conn) {
                      "bad_word VARCHAR(50) NOT NULL UNIQUE)");
 
   // ⑫ 시간표 테이블 (ENUM 활용)
-  mysql_query(*conn, "CREATE TABLE IF NOT EXISTS timetables ("
-                     "table_id INT AUTO_INCREMENT PRIMARY KEY, "
-                     "user_idx INT NOT NULL, "
-                     "subject_name VARCHAR(50), "
-                     "day_of_week ENUM('월', '화', '수', '목', '금', '토', '일'), "
-                     "start_time TIME, "
-                     "end_time TIME, "
-                     "FOREIGN KEY (user_idx) REFERENCES users (user_idx) ON DELETE CASCADE)");
+  mysql_query(
+      *conn,
+      "CREATE TABLE IF NOT EXISTS timetables ("
+      "table_id INT AUTO_INCREMENT PRIMARY KEY, "
+      "user_idx INT NOT NULL, "
+      "subject_name VARCHAR(50), "
+      "day_of_week ENUM('월', '화', '수', '목', '금', '토', '일'), "
+      "start_time TIME, "
+      "end_time TIME, "
+      "FOREIGN KEY (user_idx) REFERENCES users (user_idx) ON DELETE CASCADE)");
 
   // ⑬ 검색 로그 테이블 (사용자 본인의 기록 조회용)
-  mysql_query(*conn, "CREATE TABLE IF NOT EXISTS searchlogs ("
-                     "log_id INT AUTO_INCREMENT PRIMARY KEY, "
-                     "user_idx INT NOT NULL, "
-                     "keyword VARCHAR(100) NOT NULL, "
-                     "searched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
-                     "FOREIGN KEY (user_idx) REFERENCES users (user_idx) ON DELETE CASCADE)");
+  mysql_query(
+      *conn,
+      "CREATE TABLE IF NOT EXISTS searchlogs ("
+      "log_id INT AUTO_INCREMENT PRIMARY KEY, "
+      "user_idx INT NOT NULL, "
+      "keyword VARCHAR(100) NOT NULL, "
+      "searched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
+      "FOREIGN KEY (user_idx) REFERENCES users (user_idx) ON DELETE CASCADE)");
 
   // ──────── 시드 데이터 삽입 ─────────────────────────────────
-  mysql_query(*conn, "INSERT IGNORE INTO club_categories (category_id, category_name) VALUES "
-                     "(1, '전공'), (2, '밴드'), (3, '댄스'), (4, '봉사'), (5, '취미'), (6, '운동')");
+  mysql_query(
+      *conn,
+      "INSERT IGNORE INTO club_categories (category_id, category_name) VALUES "
+      "(1, '전공'), (2, '밴드'), (3, '댄스'), (4, '봉사'), (5, '취미'), (6, "
+      "'운동')");
 
-  mysql_query(*conn, "INSERT IGNORE INTO users (user_idx, id, pw, nickname, student_id, major, name, phone, role, is_approved) "
-                     "VALUES (1, 'admin', 'admin1234', '관리자', '00000000', '컴퓨터공학', '관리자', '010-0000-0000', 'Admin', 1)");
+  mysql_query(*conn, "INSERT IGNORE INTO users (user_idx, id, pw, nickname, "
+                     "student_id, major, name, phone, role, is_approved) "
+                     "VALUES (1, 'admin', 'admin1234', '관리자', '00000000', "
+                     "'컴퓨터공학', '관리자', '010-0000-0000', 'Admin', 1)");
 
-  mysql_query(*conn, "INSERT IGNORE INTO clubs (club_id, club_name, category_id, leader_idx, status, description) "
-                     "VALUES (1, '기본 동아리', 1, 1, '승인', '시스템 기본 설정 동아리입니다.')");
+  mysql_query(*conn, "INSERT IGNORE INTO clubs (club_id, club_name, "
+                     "category_id, leader_idx, status, description) "
+                     "VALUES (1, '기본 동아리', 1, 1, '승인', '시스템 기본 "
+                     "설정 동아리입니다.')");
 
-  mysql_query(*conn, "INSERT IGNORE INTO boardtype (type_id, board_name) VALUES (1, '동아리 홍보'), (2, '전공 동아리')");
-
+  mysql_query(*conn, "INSERT IGNORE INTO boardtype (type_id, board_name) "
+                     "VALUES (1, '동아리 홍보'), (2, '전공 동아리')");
 }
 
 int check_login(MYSQL *conn, const char *id, const char *pw) {
@@ -307,7 +335,8 @@ int update_post(MYSQL *conn, int post_id, const char *user_id,
   char query[768];
   sprintf(query,
           "UPDATE posts SET content = '%s' "
-          "WHERE post_id = %d AND user_idx = (SELECT user_idx FROM users WHERE id = '%s')",
+          "WHERE post_id = %d AND user_idx = (SELECT user_idx FROM users WHERE "
+          "id = '%s')",
           new_content, post_id, user_id);
   if (mysql_query(conn, query)) {
     fprintf(stderr, "수정 실패: %s\n", mysql_error(conn));
@@ -389,7 +418,8 @@ int update_comment(MYSQL *conn, int comment_id, const char *user_id,
   char query[768];
   sprintf(query,
           "UPDATE comments SET content = '%s' "
-          "WHERE comment_id = %d AND user_idx = (SELECT user_idx FROM users WHERE id = '%s')",
+          "WHERE comment_id = %d AND user_idx = (SELECT user_idx FROM users "
+          "WHERE id = '%s')",
           new_content, comment_id, user_id);
   if (mysql_query(conn, query)) {
     fprintf(stderr, "수정 실패: %s\n", mysql_error(conn));
@@ -404,7 +434,8 @@ int update_comment(MYSQL *conn, int comment_id, const char *user_id,
 void get_my_schedule(MYSQL *conn, const char *user_id) {
   char query[512];
   sprintf(query,
-          "SELECT t.table_id, t.day_of_week, t.start_time, t.end_time, t.subject_name "
+          "SELECT t.table_id, t.day_of_week, t.start_time, t.end_time, "
+          "t.subject_name "
           "FROM timetables t JOIN users u ON t.user_idx = u.user_idx "
           "WHERE u.id = '%s' "
           "ORDER BY FIELD(t.day_of_week,'월','화','수','목','금','토','일'), "
@@ -422,13 +453,12 @@ void get_my_schedule(MYSQL *conn, const char *user_id) {
     mysql_free_result(res);
     return;
   }
-  printf("%-6s %-5s %-7s %-7s %-20s\n", "ID", "요일", "시작", "종료",
-         "과목명");
+  printf("%-6s %-5s %-7s %-7s %-20s\n", "ID", "요일", "시작", "종료", "과목명");
   printf("------------------------------------------------------------\n");
   MYSQL_ROW row;
   while ((row = mysql_fetch_row(res))) {
-    printf("[%-4s] %-5s %-7s %-7s %-20s\n", row[0], row[1], row[2],
-           row[3], row[4]);
+    printf("[%-4s] %-5s %-7s %-7s %-20s\n", row[0], row[1], row[2], row[3],
+           row[4]);
   }
   mysql_free_result(res);
 }
@@ -441,7 +471,8 @@ int add_schedule(MYSQL *conn, const char *user_id, const char *day,
   sprintf(query,
           "INSERT INTO timetables "
           "(user_idx, day_of_week, start_time, end_time, subject_name) "
-          "VALUES ((SELECT user_idx FROM users WHERE id = '%s'),'%s','%s','%s','%s')",
+          "VALUES ((SELECT user_idx FROM users WHERE id = "
+          "'%s'),'%s','%s','%s','%s')",
           user_id, day, start, end, subject);
   if (mysql_query(conn, query)) {
     fprintf(stderr, "추가 실패: %s\n", mysql_error(conn));
@@ -455,7 +486,8 @@ int delete_schedule(MYSQL *conn, int schedule_id, const char *user_id) {
   char query[256];
   sprintf(query,
           "DELETE FROM timetables "
-          "WHERE table_id = %d AND user_idx = (SELECT user_idx FROM users WHERE id = '%s')",
+          "WHERE table_id = %d AND user_idx = (SELECT user_idx FROM users "
+          "WHERE id = '%s')",
           schedule_id, user_id);
   if (mysql_query(conn, query)) {
     fprintf(stderr, "삭제 실패: %s\n", mysql_error(conn));
@@ -476,8 +508,10 @@ int insert_message(MYSQL *conn, const char *user_id, const char *content) {
   mysql_real_escape_string(conn, esc_user_id, user_id, strlen(user_id));
 
   char query[2048];
-  sprintf(query, "INSERT INTO messages (receiver_idx, contented_at) VALUES "
-                 "((SELECT user_idx FROM users WHERE id = '%s'), '%s')", esc_user_id, esc_content);
+  sprintf(query,
+          "INSERT INTO messages (receiver_idx, contented_at) VALUES "
+          "((SELECT user_idx FROM users WHERE id = '%s'), '%s')",
+          esc_user_id, esc_content);
   if (mysql_query(conn, query)) {
     fprintf(stderr, "알림 등록 실패: %s\n", mysql_error(conn));
     return 0;
@@ -494,7 +528,8 @@ int get_user_idx_by_id(MYSQL *conn, const char *user_id) {
   }
   MYSQL_RES *res = mysql_store_result(conn);
   if (res == NULL || mysql_num_rows(res) == 0) {
-    if (res) mysql_free_result(res);
+    if (res)
+      mysql_free_result(res);
     return -1;
   }
   MYSQL_ROW row = mysql_fetch_row(res);
@@ -507,16 +542,19 @@ int get_user_idx_by_id(MYSQL *conn, const char *user_id) {
 // 신규 게시판 및 댓글 제어 함수군
 // ─────────────────────────────────────────────────
 
-int insert_post(MYSQL *conn, const char *user_id, int category_id, const char *title, const char *content) {
+int insert_post(MYSQL *conn, const char *user_id, int category_id,
+                const char *title, const char *content) {
   char esc_title[500], esc_content[2500], esc_user_id[100];
   mysql_real_escape_string(conn, esc_title, title, strlen(title));
   mysql_real_escape_string(conn, esc_content, content, strlen(content));
   mysql_real_escape_string(conn, esc_user_id, user_id, strlen(user_id));
-  
+
   char query[4000];
-  sprintf(query, "INSERT INTO posts (club_id, user_idx, type_id, title, content) VALUES "
-                 "(1, (SELECT user_idx FROM users WHERE id = '%s'), %d, '%s', '%s')",
-          esc_user_id, category_id, esc_title, esc_content);
+  sprintf(
+      query,
+      "INSERT INTO posts (club_id, user_idx, type_id, title, content) VALUES "
+      "(1, (SELECT user_idx FROM users WHERE id = '%s'), %d, '%s', '%s')",
+      esc_user_id, category_id, esc_title, esc_content);
   if (mysql_query(conn, query)) {
     fprintf(stderr, "게시글 작성 실패: %s\n", mysql_error(conn));
     return 0;
@@ -524,19 +562,24 @@ int insert_post(MYSQL *conn, const char *user_id, int category_id, const char *t
   return 1;
 }
 
-int insert_comment(MYSQL *conn, int post_id, const char *user_id, const char *content, int parent_comment_id) {
+int insert_comment(MYSQL *conn, int post_id, const char *user_id,
+                   const char *content, int parent_comment_id) {
   char esc_content[2500], esc_user_id[100];
   mysql_real_escape_string(conn, esc_content, content, strlen(content));
   mysql_real_escape_string(conn, esc_user_id, user_id, strlen(user_id));
-  
+
   char query[4000];
   if (parent_comment_id > 0) {
-    sprintf(query, "INSERT INTO comments (post_id, user_idx, content, parent_comment_id) VALUES "
-                   "(%d, (SELECT user_idx FROM users WHERE id = '%s'), '%s', %d)",
+    sprintf(query,
+            "INSERT INTO comments (post_id, user_idx, content, "
+            "parent_comment_id) VALUES "
+            "(%d, (SELECT user_idx FROM users WHERE id = '%s'), '%s', %d)",
             post_id, esc_user_id, esc_content, parent_comment_id);
   } else {
-    sprintf(query, "INSERT INTO comments (post_id, user_idx, content, parent_comment_id) VALUES "
-                   "(%d, (SELECT user_idx FROM users WHERE id = '%s'), '%s', NULL)",
+    sprintf(query,
+            "INSERT INTO comments (post_id, user_idx, content, "
+            "parent_comment_id) VALUES "
+            "(%d, (SELECT user_idx FROM users WHERE id = '%s'), '%s', NULL)",
             post_id, esc_user_id, esc_content);
   }
   if (mysql_query(conn, query)) {
@@ -549,10 +592,12 @@ int insert_comment(MYSQL *conn, int post_id, const char *user_id, const char *co
 int insert_comment_like(MYSQL *conn, int comment_id, const char *user_id) {
   char esc_user_id[100];
   mysql_real_escape_string(conn, esc_user_id, user_id, strlen(user_id));
-  
+
   char query[512];
-  sprintf(query, "INSERT INTO comment_likes (comment_id, user_idx) VALUES "
-                 "(%d, (SELECT user_idx FROM users WHERE id = '%s'))", comment_id, esc_user_id);
+  sprintf(query,
+          "INSERT INTO comment_likes (comment_id, user_idx) VALUES "
+          "(%d, (SELECT user_idx FROM users WHERE id = '%s'))",
+          comment_id, esc_user_id);
   if (mysql_query(conn, query)) {
     return 0;
   }
@@ -561,12 +606,14 @@ int insert_comment_like(MYSQL *conn, int comment_id, const char *user_id) {
 
 int get_comment_likes_count(MYSQL *conn, int comment_id) {
   char query[256];
-  sprintf(query, "SELECT COUNT(*) FROM comment_likes WHERE comment_id = %d", comment_id);
+  sprintf(query, "SELECT COUNT(*) FROM comment_likes WHERE comment_id = %d",
+          comment_id);
   if (mysql_query(conn, query)) {
     return 0;
   }
   MYSQL_RES *res = mysql_store_result(conn);
-  if (res == NULL) return 0;
+  if (res == NULL)
+    return 0;
   MYSQL_ROW row = mysql_fetch_row(res);
   int count = row ? atoi(row[0]) : 0;
   mysql_free_result(res);
@@ -576,14 +623,19 @@ int get_comment_likes_count(MYSQL *conn, int comment_id) {
 int has_user_liked_comment(MYSQL *conn, int comment_id, const char *user_id) {
   char esc_user_id[100];
   mysql_real_escape_string(conn, esc_user_id, user_id, strlen(user_id));
-  
+
   char query[512];
-  sprintf(query, "SELECT 1 FROM comment_likes WHERE comment_id = %d AND user_idx = (SELECT user_idx FROM users WHERE id = '%s')", comment_id, esc_user_id);
-  if (mysql_query(conn, query)) return 0;
+  sprintf(query,
+          "SELECT 1 FROM comment_likes WHERE comment_id = %d AND user_idx = "
+          "(SELECT user_idx FROM users WHERE id = '%s')",
+          comment_id, esc_user_id);
+  if (mysql_query(conn, query))
+    return 0;
   MYSQL_RES *res = mysql_store_result(conn);
   int liked = 0;
   if (res) {
-    if (mysql_num_rows(res) > 0) liked = 1;
+    if (mysql_num_rows(res) > 0)
+      liked = 1;
     mysql_free_result(res);
   }
   return liked;
@@ -595,7 +647,8 @@ int is_user_club_leader(MYSQL *conn, const char *user_id) {
   mysql_real_escape_string(conn, esc_user_id, user_id, strlen(user_id));
 
   // Check if they are Admin in users table
-  sprintf(query, "SELECT 1 FROM users WHERE id = '%s' AND role = 'Admin'", esc_user_id);
+  sprintf(query, "SELECT 1 FROM users WHERE id = '%s' AND role = 'Admin'",
+          esc_user_id);
   if (mysql_query(conn, query) == 0) {
     MYSQL_RES *res = mysql_store_result(conn);
     if (res) {
@@ -606,15 +659,19 @@ int is_user_club_leader(MYSQL *conn, const char *user_id) {
       mysql_free_result(res);
     }
   }
-  
+
   // Check if they are Leader in clubmembers table
-  sprintf(query, "SELECT 1 FROM clubmembers cm JOIN users u ON cm.user_idx = u.user_idx "
-                 "WHERE u.id = '%s' AND cm.role = 'Leader'", esc_user_id);
+  sprintf(
+      query,
+      "SELECT 1 FROM clubmembers cm JOIN users u ON cm.user_idx = u.user_idx "
+      "WHERE u.id = '%s' AND cm.role = 'Leader'",
+      esc_user_id);
   if (mysql_query(conn, query) == 0) {
     MYSQL_RES *res = mysql_store_result(conn);
     int is_leader = 0;
     if (res) {
-      if (mysql_num_rows(res) > 0) is_leader = 1;
+      if (mysql_num_rows(res) > 0)
+        is_leader = 1;
       mysql_free_result(res);
     }
     return is_leader;
@@ -624,7 +681,9 @@ int is_user_club_leader(MYSQL *conn, const char *user_id) {
 
 int delete_post(MYSQL *conn, int post_id, const char *user_id) {
   char query[256];
-  sprintf(query, "DELETE FROM posts WHERE post_id = %d AND user_idx = (SELECT user_idx FROM users WHERE id = '%s')",
+  sprintf(query,
+          "DELETE FROM posts WHERE post_id = %d AND user_idx = (SELECT "
+          "user_idx FROM users WHERE id = '%s')",
           post_id, user_id);
   if (mysql_query(conn, query)) {
     fprintf(stderr, "삭제 실패: %s\n", mysql_error(conn));
@@ -632,6 +691,3 @@ int delete_post(MYSQL *conn, int post_id, const char *user_id) {
   }
   return (int)mysql_affected_rows(conn) > 0 ? 1 : 0;
 }
-
-
-
