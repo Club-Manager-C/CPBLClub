@@ -8,7 +8,7 @@
 
 const char *DB_HOST = "localhost";
 const char *DB_USER = "root";
-const char *DB_PW = "kim7479050810#";
+const char *DB_PW = "rds12003!";
 const char *DB_NAME = "cpbl_db";
 
 void init_db(MYSQL **conn) {
@@ -63,6 +63,10 @@ void init_db(MYSQL **conn) {
                      "bad_word_count INT DEFAULT 0, "
                      "is_suspended TINYINT DEFAULT 0, "
                      "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+
+  // 마이그레이션: 기존 사용자 테이블에 새 필드 추가 (이미 존재하면 무시됨)
+  mysql_query(*conn, "ALTER TABLE users ADD COLUMN bad_word_count INT DEFAULT 0");
+  mysql_query(*conn, "ALTER TABLE users ADD COLUMN is_suspended TINYINT DEFAULT 0");
 
   // ④ 동아리 테이블 (leader_idx를 통해 현재 주인 식별)
   mysql_query(
@@ -743,5 +747,133 @@ int delete_post(MYSQL *conn, int post_id, const char *user_id) {
   return (int)mysql_affected_rows(conn) > 0 ? 1 : 0;
 }
 
+void display_my_profile(MYSQL *conn, const char *logged_id) {
+    char query[1024];
+    char esc_id[100];
+    mysql_real_escape_string(conn, esc_id, logged_id, strlen(logged_id));
 
+    printf("\n=======================================\n");
+    printf("         내 프로필 (마이페이지)\n");
+    printf("=======================================\n");
 
+    sprintf(query, 
+        "SELECT user_idx, name, student_id, major "
+        "FROM users WHERE id = '%s'", esc_id);
+
+    if (mysql_query(conn, query)) {
+        printf("정보 조회 실패: %s\n", mysql_error(conn));
+        return;
+    }
+
+    MYSQL_RES *res_user = mysql_store_result(conn);
+    if (!res_user || mysql_num_rows(res_user) == 0) {
+        printf("유저 정보를 찾을 수 없습니다.\n");
+        if (res_user) mysql_free_result(res_user);
+        return;
+    }
+
+    MYSQL_ROW row_user = mysql_fetch_row(res_user);
+    int user_idx = atoi(row_user[0]);
+    
+    printf(" [기본 정보]\n");
+    printf(" - 이름: %s\n", row_user[1]);
+    printf(" - 학번: %s\n", row_user[2]);
+    printf(" - 전공: %s\n", row_user[3]);
+    mysql_free_result(res_user);
+
+    printf("\n [가입된 동아리 목록]\n");
+
+    sprintf(query,
+        "SELECT c.club_name, cm.role, cm.joined_at "
+        "FROM clubmembers cm "
+        "JOIN clubs c ON cm.club_id = c.club_id "
+        "WHERE cm.user_idx = %d "
+        "ORDER BY cm.joined_at DESC", user_idx);
+
+    if (mysql_query(conn, query)) {
+        printf("동아리 목록 조회 실패: %s\n", mysql_error(conn));
+        return;
+    }
+
+    MYSQL_RES *res_clubs = mysql_store_result(conn);
+    if (!res_clubs || mysql_num_rows(res_clubs) == 0) {
+        printf(" 가입된 동아리가 없습니다.\n");
+    } else {
+        MYSQL_ROW row_club;
+        while ((row_club = mysql_fetch_row(res_clubs))) {
+            const char* club_name = row_club[0];
+            const char* role_str = row_club[1];
+            const char* joined_at = row_club[2];
+
+            const char* display_role = (strcmp(role_str, "Leader") == 0) 
+                                        ? "[OWNER(동아리장)]" 
+                                        : "[MEMBER(일반회원)]";
+
+            printf(" - %s %s (가입일: %s)\n", club_name, display_role, joined_at);
+        }
+    }
+    if (res_clubs) mysql_free_result(res_clubs);
+    printf("=======================================\n");
+}
+
+int increment_bad_word_count(MYSQL *conn, const char *user_id) {
+    if (!user_id || strlen(user_id) == 0) return 0;
+    
+    char esc_id[100];
+    mysql_real_escape_string(conn, esc_id, user_id, strlen(user_id));
+
+    char query[512];
+    sprintf(query, "UPDATE users SET bad_word_count = bad_word_count + 1 WHERE id = '%s'", esc_id);
+    if (mysql_query(conn, query)) {
+        fprintf(stderr, "비속어 카운트 증가 실패: %s\n", mysql_error(conn));
+        return 0;
+    }
+
+    sprintf(query, "SELECT bad_word_count FROM users WHERE id = '%s'", esc_id);
+    if (mysql_query(conn, query) == 0) {
+        MYSQL_RES *res = mysql_store_result(conn);
+        if (res) {
+            MYSQL_ROW row = mysql_fetch_row(res);
+            if (row) {
+                int count = atoi(row[0]);
+                mysql_free_result(res);
+                if (count >= 5) {
+                    sprintf(query, "UPDATE users SET is_suspended = 1 WHERE id = '%s'", esc_id);
+                    mysql_query(conn, query);
+                    printf("\n=====================================================================\n");
+                    printf(" ❌ [계정 정지] 비속어 누적 5회 도달로 인해 계정이 즉시 정지됩니다.\n");
+                    printf("=====================================================================\n");
+                    return 1;
+                } else {
+                    printf("⚠️ 비속어 누적 경고: 현재 누적 %d회 / 5회 (5회 도달 시 계정이 즉시 정지됩니다.)\n", count);
+                }
+            } else {
+                mysql_free_result(res);
+            }
+        }
+    }
+    return 0;
+}
+
+int is_currently_suspended(MYSQL *conn, const char *user_id) {
+    if (!user_id || strlen(user_id) == 0) return 0;
+    
+    char esc_id[100];
+    mysql_real_escape_string(conn, esc_id, user_id, strlen(user_id));
+
+    char query[512];
+    sprintf(query, "SELECT is_suspended FROM users WHERE id = '%s'", esc_id);
+    if (mysql_query(conn, query) == 0) {
+        MYSQL_RES *res = mysql_store_result(conn);
+        if (res) {
+            MYSQL_ROW row = mysql_fetch_row(res);
+            if (row) {
+                int suspended = atoi(row[0]);
+                mysql_free_result(res);
+                return suspended;
+            }
+            mysql_free_result(res);
+        }
+    }
+    return 0;
+}
