@@ -146,6 +146,46 @@ void manageClubRequests(MYSQL *conn) {
     }
 }
 
+void displaySuspendedUsers(MYSQL *conn) {
+    printf("\n==================================================\n");
+    printf("              정지된 계정 회원 목록\n");
+    printf("==================================================\n");
+
+    char query[512];
+    sprintf(query, "SELECT id, nickname, name, student_id, bad_word_count FROM users WHERE is_suspended = 1 ORDER BY bad_word_count DESC");
+
+    if (mysql_query(conn, query)) {
+        fprintf(stderr, "정지 회원 목록 조회 실패: %s\n", mysql_error(conn));
+        return;
+    }
+
+    MYSQL_RES *res = mysql_store_result(conn);
+    if (res == NULL) {
+        fprintf(stderr, "결과셋 로드 실패: %s\n", mysql_error(conn));
+        return;
+    }
+
+    int row_count = mysql_num_rows(res);
+    if (row_count == 0) {
+        printf("정지된 회원이 존재하지 않습니다.\n");
+        mysql_free_result(res);
+        return;
+    }
+
+    printf("%-15s %-15s %-12s %-12s %-10s\n", "아이디", "닉네임", "이름", "학번", "비속어 누적");
+    printf("----------------------------------------------------------------------\n");
+
+    MYSQL_ROW row;
+    while ((row = mysql_fetch_row(res))) {
+        printf("%-15s %-15s %-12s %-12s %s회\n", 
+               row[0], row[1], row[2], row[3], row[4]);
+    }
+
+    mysql_free_result(res);
+    printf("----------------------------------------------------------------------\n");
+    printf("총 %d명의 회원이 정지 상태입니다.\n", row_count);
+}
+
 // 관리자 메인 메뉴
 void admin_home_screen(MYSQL *conn) {
     int choice;
@@ -158,6 +198,7 @@ void admin_home_screen(MYSQL *conn) {
         printf("2. 동아리 삭제\n");
         printf("3. 동아리 개설 신청 관리\n");
         printf("4. 동아리 카테고리 설정\n");
+        printf("5. 계정 정지 회원 목록 조회\n");
         printf("0. 종료\n");
         printf("============================\n");
         printf("입력: ");
@@ -175,6 +216,9 @@ void admin_home_screen(MYSQL *conn) {
                 break;
             case 4:
                 category_menu(conn);
+                break;
+            case 5:
+                displaySuspendedUsers(conn);
                 break;
             case 0:
                 printf("관리자 프로그램을 종료합니다.\n");

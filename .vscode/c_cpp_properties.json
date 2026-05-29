@@ -3,6 +3,7 @@
     {
       "name": "Win32",
       "includePath": [
+        "${workspaceFolder}/include",
         "${workspaceFolder}/**",
         "C:/Program Files/MySQL/MySQL Server 8.0/include"
       ],

@@ -1,8 +1,8 @@
 #include "mypage.h"
 #include "board.h"
+#include "filter.h"
 #include <stdio.h>
 #include <string.h>
-
 
 // ─────────────────────────────────────────────
 // 헬퍼① — 내 게시글 확인/수정
@@ -10,30 +10,42 @@
 static void my_posts_menu(MYSQL *conn, const char *logged_id) {
   int choice;
   while (1) {
+    if (is_currently_suspended(conn, logged_id)) return;
     printf("\n=== 내 게시글 확인/수정/삭제 ===\n");
     get_my_posts(conn, logged_id);
-    
+
     printf("\n1. 수정  2. 삭제  0. 뒤로\n입력: ");
     if (scanf("%d", &choice) != 1) {
-      while (getchar() != '\n');
+      while (getchar() != '\n')
+        ;
       continue;
     }
-    
+
     if (choice == 0) {
       return;
     } else if (choice == 1) {
       int post_id;
       printf("수정할 게시글 ID 입력 (0: 취소): ");
       if (scanf("%d", &post_id) != 1 || post_id == 0) {
-        while (getchar() != '\n');
+        while (getchar() != '\n')
+          ;
         continue;
       }
-      
+
       char new_content[500];
       printf("새 내용 입력: ");
-      while (getchar() != '\n'); // 버퍼 정리
+      while (getchar() != '\n')
+        ; // 버퍼 정리
       fgets(new_content, sizeof(new_content), stdin);
       new_content[strcspn(new_content, "\n")] = '\0';
+
+      // 비속어 필터링 검사
+      if (contains_slang(new_content)) {
+        printf("❌ 부적절한 단어(욕설 등)가 포함되어 있어 글을 수정할 수 "
+               "없습니다.\n");
+        increment_bad_word_count(conn, logged_id);
+        continue;
+      }
 
       if (update_post(conn, post_id, logged_id, new_content)) {
         printf("✅ 수정 완료!\n");
@@ -44,10 +56,11 @@ static void my_posts_menu(MYSQL *conn, const char *logged_id) {
       int post_id;
       printf("삭제할 게시글 ID 입력 (0: 취소): ");
       if (scanf("%d", &post_id) != 1 || post_id == 0) {
-        while (getchar() != '\n');
+        while (getchar() != '\n')
+          ;
         continue;
       }
-      
+
       char confirm;
       printf("정말 삭제하시겠습니까? (y/n): ");
       scanf(" %c", &confirm);
@@ -72,17 +85,28 @@ static void my_posts_menu(MYSQL *conn, const char *logged_id) {
 static void my_comments_menu(MYSQL *conn, const char *logged_id) {
   int comment_id;
   while (1) {
+    if (is_currently_suspended(conn, logged_id)) return;
     printf("\n=== 내 댓글 확인/수정 ===\n");
     get_my_comments(conn, logged_id);
     printf("\n수정할 댓글 ID 입력 (0: 뒤로): ");
     scanf("%d", &comment_id);
-    if (comment_id == 0) return;
+    if (comment_id == 0)
+      return;
 
     char new_content[500];
     printf("새 내용 입력: ");
-    while (getchar() != '\n');
+    while (getchar() != '\n')
+      ;
     fgets(new_content, sizeof(new_content), stdin);
     new_content[strcspn(new_content, "\n")] = '\0';
+
+    // 비속어 필터링 검사
+    if (contains_slang(new_content)) {
+      printf("❌ 부적절한 단어(욕설 등)가 포함되어 있어 댓글을 수정할 수 "
+             "없습니다.\n");
+      increment_bad_word_count(conn, logged_id);
+      continue;
+    }
 
     if (update_comment(conn, comment_id, logged_id, new_content)) {
       printf("✅ 수정 완료!\n");
@@ -98,6 +122,7 @@ static void my_comments_menu(MYSQL *conn, const char *logged_id) {
 static void my_schedule_menu(MYSQL *conn, const char *logged_id) {
   int choice;
   while (1) {
+    if (is_currently_suspended(conn, logged_id)) return;
     printf("\n=== 시간표 확인/수정 ===\n");
     get_my_schedule(conn, logged_id);
     printf("\n1. 추가  2. 삭제  0. 뒤로\n입력: ");
@@ -137,54 +162,57 @@ static void my_schedule_menu(MYSQL *conn, const char *logged_id) {
 
 void viewMyMessages(MYSQL *conn, const char *logged_id) {
   printf("\n=== 📬 메시지함 ===\n");
-  
+
   char query[512];
-  sprintf(query, 
-      "SELECT m.message_id, m.contented_at, m.is_read, m.sent_at "
-      "FROM messages m JOIN users u ON m.receiver_idx = u.user_idx "
-      "WHERE u.id = '%s' "
-      "ORDER BY m.sent_at DESC", 
-      logged_id
-  );
-  
+  sprintf(query,
+          "SELECT m.message_id, m.contented_at, m.is_read, m.sent_at "
+          "FROM messages m JOIN users u ON m.receiver_idx = u.user_idx "
+          "WHERE u.id = '%s' "
+          "ORDER BY m.sent_at DESC",
+          logged_id);
+
   if (mysql_query(conn, query)) {
-      fprintf(stderr, "메시지 로딩 실패: %s\n", mysql_error(conn));
-      return;
+    fprintf(stderr, "메시지 로딩 실패: %s\n", mysql_error(conn));
+    return;
   }
-  
+
   MYSQL_RES *res = mysql_store_result(conn);
   if (res == NULL) {
-      fprintf(stderr, "결과셋 로딩 실패\n");
-      return;
+    fprintf(stderr, "결과셋 로딩 실패\n");
+    return;
   }
-  
+
   int count = mysql_num_rows(res);
   if (count == 0) {
-      printf("메시지함이 비어 있습니다.\n");
-      mysql_free_result(res);
-      return;
+    printf("메시지함이 비어 있습니다.\n");
+    mysql_free_result(res);
+    return;
   }
-  
-  printf("%-8s %-50s %-10s %-20s\n", "메시지ID", "내용", "읽음상태", "수신일시");
-  printf("----------------------------------------------------------------------------------------\n");
-  
+
+  printf("%-8s %-50s %-10s %-20s\n", "메시지ID", "내용", "읽음상태",
+         "수신일시");
+  printf("---------------------------------------------------------------------"
+         "-------------------\n");
+
   MYSQL_ROW row;
   while ((row = mysql_fetch_row(res))) {
-      const char *is_read_str = (atoi(row[2]) == 1) ? "읽음" : "안읽음";
-      printf("%-8s %-50s %-10s %-20s\n", 
-             row[0], row[1], is_read_str, row[3]);
+    const char *is_read_str = (atoi(row[2]) == 1) ? "읽음" : "안읽음";
+    printf("%-8s %-50s %-10s %-20s\n", row[0], row[1], is_read_str, row[3]);
   }
   mysql_free_result(res);
-  
+
   // 조회 완료 시 읽음 상태로 일괄 업데이트
-  sprintf(query, "UPDATE messages SET is_read = 1 "
-                 "WHERE receiver_idx = (SELECT user_idx FROM users WHERE id = '%s') AND is_read = 0", logged_id);
+  sprintf(query,
+          "UPDATE messages SET is_read = 1 "
+          "WHERE receiver_idx = (SELECT user_idx FROM users WHERE id = '%s') "
+          "AND is_read = 0",
+          logged_id);
   if (mysql_query(conn, query)) {
-      fprintf(stderr, "읽음 상태 업데이트 실패: %s\n", mysql_error(conn));
+    fprintf(stderr, "읽음 상태 업데이트 실패: %s\n", mysql_error(conn));
   } else {
-      printf("\n✅ 모든 새로운 메시지를 읽음 상태로 표시했습니다.\n");
+    printf("\n✅ 모든 새로운 메시지를 읽음 상태로 표시했습니다.\n");
   }
-  
+
   printf("\n아무 키나 누르고 Enter를 입력하면 마이페이지로 돌아갑니다: ");
   char dummy[50];
   scanf("%49s", dummy);
@@ -196,6 +224,7 @@ void viewMyMessages(MYSQL *conn, const char *logged_id) {
 static void club_manage_menu(MYSQL *conn, int club_id, const char *logged_id) {
   int choice;
   while (1) {
+    if (is_currently_suspended(conn, logged_id)) return;
     printf("\n====================================\n");
     printf("         동아리 관리 메뉴\n");
     printf("====================================\n");
@@ -204,12 +233,13 @@ static void club_manage_menu(MYSQL *conn, int club_id, const char *logged_id) {
     printf("3. 동아리 정보 수정\n");
     printf("0. 뒤로가기\n");
     printf("입력: ");
-    
+
     if (scanf("%d", &choice) != 1) {
-      while (getchar() != '\n');
+      while (getchar() != '\n')
+        ;
       continue;
     }
-    
+
     if (choice == 0) {
       break;
     } else if (choice == 1) {
@@ -223,19 +253,28 @@ static void club_manage_menu(MYSQL *conn, int club_id, const char *logged_id) {
       scanf("%19s", target_id);
       if (transfer_club_ownership(conn, club_id, logged_id, target_id)) {
         printf("⚠️ 권한이 위임되어 관리 메뉴를 종료합니다.\n");
-        return; 
+        return;
       }
     } else if (choice == 3) {
       char new_name[100], new_desc[500];
       printf("새 동아리 이름 (최대 50자): ");
-      while (getchar() != '\n');
+      while (getchar() != '\n')
+        ;
       fgets(new_name, sizeof(new_name), stdin);
       new_name[strcspn(new_name, "\n")] = '\0';
-      
+
       printf("새 소개글 (최대 300자): ");
       fgets(new_desc, sizeof(new_desc), stdin);
       new_desc[strcspn(new_desc, "\n")] = '\0';
-      
+
+      // 비속어 필터링 검사
+      if (contains_slang(new_name) || contains_slang(new_desc)) {
+        printf("❌ 부적절한 단어(욕설 등)가 포함되어 있어 동아리 정보를 수정할 "
+               "수 없습니다.\n");
+        increment_bad_word_count(conn, logged_id);
+        continue;
+      }
+
       update_club_info(conn, club_id, logged_id, new_name, new_desc);
     } else {
       printf("잘못된 입력입니다.\n");
@@ -246,14 +285,16 @@ static void club_manage_menu(MYSQL *conn, int club_id, const char *logged_id) {
 // ─────────────────────────────────────────────
 // 동아리 개별 공간 (공지사항 조회/작성)
 // ─────────────────────────────────────────────
-static void club_space_menu(MYSQL *conn, int club_id, const char *club_name, const char *logged_id, int is_owner) {
+static void club_space_menu(MYSQL *conn, int club_id, const char *club_name,
+                            const char *logged_id, int is_owner) {
   int choice;
   while (1) {
+    if (is_currently_suspended(conn, logged_id)) return;
     printf("\n====================================\n");
     printf(" [%s] 동아리 공간 \n", club_name);
     printf("====================================\n");
     get_club_notices(conn, club_id);
-    
+
     printf("\n1. 공지사항 새로고침\n");
     printf("2. 공지사항 상세 보기\n");
     if (is_owner) {
@@ -262,12 +303,13 @@ static void club_space_menu(MYSQL *conn, int club_id, const char *club_name, con
     }
     printf("0. 뒤로가기\n");
     printf("입력: ");
-    
+
     if (scanf("%d", &choice) != 1) {
-      while (getchar() != '\n');
+      while (getchar() != '\n')
+        ;
       continue;
     }
-    
+
     if (choice == 0) {
       break;
     } else if (choice == 1) {
@@ -276,7 +318,8 @@ static void club_space_menu(MYSQL *conn, int club_id, const char *club_name, con
       int post_id;
       printf("확인할 공지사항 번호(ID) 입력: ");
       if (scanf("%d", &post_id) != 1) {
-        while (getchar() != '\n');
+        while (getchar() != '\n')
+          ;
         continue;
       }
       view_post_detail_menu(conn, post_id, logged_id);
@@ -284,14 +327,23 @@ static void club_space_menu(MYSQL *conn, int club_id, const char *club_name, con
       char title[200], content[2000];
       printf("\n=== 공지사항 작성 ===\n");
       printf("제목: ");
-      while (getchar() != '\n');
+      while (getchar() != '\n')
+        ;
       fgets(title, sizeof(title), stdin);
       title[strcspn(title, "\n")] = '\0';
-      
+
       printf("내용: ");
       fgets(content, sizeof(content), stdin);
       content[strcspn(content, "\n")] = '\0';
-      
+
+      // 비속어 필터링 검사
+      if (contains_slang(title) || contains_slang(content)) {
+        printf("❌ 부적절한 단어(욕설 등)가 포함되어 있어 공지사항을 등록할 수 "
+               "없습니다.\n");
+        increment_bad_word_count(conn, logged_id);
+        continue;
+      }
+
       if (insert_club_notice(conn, club_id, logged_id, title, content)) {
         printf("✅ 공지사항이 성공적으로 등록되었습니다.\n");
       }
@@ -312,35 +364,40 @@ static void my_clubs_menu(MYSQL *conn, const char *logged_id) {
   int club_ids[50];
   char club_names[50][100];
   int roles[50]; // 1=OWNER, 0=MEMBER
-  
+
   while (1) {
-    int count = get_user_joined_clubs(conn, logged_id, club_ids, club_names, roles);
+    if (is_currently_suspended(conn, logged_id)) return;
+    int count =
+        get_user_joined_clubs(conn, logged_id, club_ids, club_names, roles);
     if (count == 0) {
       printf("\n가입된 동아리가 없습니다.\n");
       return;
     }
-    
+
     printf("\n============================\n");
     printf("      내 동아리 목록\n");
     printf("============================\n");
     for (int i = 0; i < count; i++) {
-      printf("%d. %s %s\n", i + 1, club_names[i], roles[i] ? "[OWNER]" : "[MEMBER]");
+      printf("%d. %s %s\n", i + 1, club_names[i],
+             roles[i] ? "[OWNER]" : "[MEMBER]");
     }
     printf("0. 뒤로가기\n");
     printf("============================\n");
     printf("입장할 동아리 번호 선택: ");
-    
+
     int choice;
     if (scanf("%d", &choice) != 1) {
-      while (getchar() != '\n');
+      while (getchar() != '\n')
+        ;
       continue;
     }
-    
+
     if (choice == 0) {
       break;
     } else if (choice >= 1 && choice <= count) {
       int idx = choice - 1;
-      club_space_menu(conn, club_ids[idx], club_names[idx], logged_id, roles[idx]);
+      club_space_menu(conn, club_ids[idx], club_names[idx], logged_id,
+                      roles[idx]);
     } else {
       printf("잘못된 번호입니다.\n");
     }
@@ -353,6 +410,7 @@ static void my_clubs_menu(MYSQL *conn, const char *logged_id) {
 void my_page(MYSQL *conn, const char *logged_id) {
   int choice;
   while (1) {
+    if (is_currently_suspended(conn, logged_id)) return;
     display_my_profile(conn, logged_id);
 
     printf("\n============================\n");
@@ -370,22 +428,32 @@ void my_page(MYSQL *conn, const char *logged_id) {
     scanf("%d", &choice);
 
     switch (choice) {
-      case 1: my_posts_menu(conn, logged_id);    break;
-      case 2: my_comments_menu(conn, logged_id); break;
-      case 3: {
-        viewMyMessages(conn, logged_id);
-        break;
+    case 1:
+      my_posts_menu(conn, logged_id);
+      break;
+    case 2:
+      my_comments_menu(conn, logged_id);
+      break;
+    case 3: {
+      viewMyMessages(conn, logged_id);
+      break;
+    }
+    case 4:
+      my_schedule_menu(conn, logged_id);
+      break;
+    case 5:
+      my_clubs_menu(conn, logged_id);
+      break;
+    case 9: {
+      if (delete_user_account(conn, logged_id)) {
+        return; // 성공적으로 탈퇴 시 메인 로그인 화면으로 빠져나감
       }
-      case 4: my_schedule_menu(conn, logged_id); break;
-      case 5: my_clubs_menu(conn, logged_id);    break;
-      case 9: {
-        if (delete_user_account(conn, logged_id)) {
-          return; // 성공적으로 탈퇴 시 메인 로그인 화면으로 빠져나감
-        }
-        break;
-      }
-      case 0: return;
-      default: printf("잘못된 입력입니다.\n");
+      break;
+    }
+    case 0:
+      return;
+    default:
+      printf("잘못된 입력입니다.\n");
     }
   }
 }
