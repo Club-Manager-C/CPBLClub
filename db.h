@@ -44,5 +44,6 @@ int add_schedule(MYSQL *conn, const char *user_id, const char *day,
                  const char *start, const char *end, const char *subject,
                  const char *location);
 int delete_schedule(MYSQL *conn, int schedule_id, const char *user_id);
+void display_my_profile(MYSQL *conn, const char *logged_id);
 
 #endif // DB_H
