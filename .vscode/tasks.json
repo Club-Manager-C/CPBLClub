@@ -20,19 +20,21 @@
                 "Admin_Interface.c",
                 "clube_manage.c",
                 "category.c",
+                "filter.c",
+                "apply_period.c",
                 "-o",
                 "CPBL.exe",
                 "-I",
+                "include",
+                "-I",
                 "C:\\Program Files\\MySQL\\MySQL Server 8.0\\include",
-                "C:\\Program Files\\MySQL\\MySQL Server 8.0\\lib\\libmysql.lib"
+                "libmysql.lib"
             ],
             "group": {
                 "kind": "build",
                 "isDefault": true
             },
-            "problemMatcher": [
-                "$gcc"
-            ],
+            "problemMatcher": [],
             "detail": "Compiler: gcc"
         }
     ]

@@ -2,6 +2,8 @@
 #include "board.h"
 #include "db.h"
 #include "mypage.h"
+#include "apply_period.h"
+#include "filter.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -63,6 +65,13 @@ void apply_club_leader(MYSQL *conn, const char *logged_id) {
   printf("동아리의 목적 및 설명 (300자 이내): ");
   fgets(description, sizeof(description), stdin);
   description[strcspn(description, "\n")] = 0; // 개행 제거
+
+  // 비속어 필터링 검사
+  if (contains_slang(club_name) || contains_slang(description)) {
+    printf("\n❌ 부적절한 단어(욕설 등)가 포함되어 있어 동아리 신청을 할 수 없습니다.\n");
+    increment_bad_word_count(conn, logged_id);
+    return;
+  }
 
   // 문자열 SQL 인젝션 방지를 위한 안전한 이스케이프
   char esc_club_name[200], esc_prof[100], esc_hours[200], esc_desc[600], esc_logged_id[100];
@@ -157,13 +166,14 @@ void home_screen(MYSQL *conn, const char *logged_id) {
   int choice;
 
   while (1) {
+    if (is_currently_suspended(conn, logged_id)) return;
     printf("\n============================\n");
     printf("  메인 메뉴\n");
     printf("============================\n");
     printf("1. 동아리 목록 (카테고리별)\n");
     printf("2. 전공 동아리 게시판\n");
     printf("3. 마이페이지\n");
-    printf("4. 동아리장 및 동아리 신청\n");
+    printf("4. 동아리 개설 신청\n");
     printf("0. 로그아웃\n");
     printf("============================\n");
     printf("입력: ");
@@ -180,7 +190,15 @@ void home_screen(MYSQL *conn, const char *logged_id) {
       my_page(conn, logged_id);
       break;
     case 4:
-      apply_club_leader(conn, logged_id);
+      // 신청 기간 확인 후 동아리장 신청 실행
+      if (is_apply_period_open(conn)) 
+      {   // 신청 기간 열려있음
+          apply_club_leader(conn, logged_id);
+
+      } else {
+          // 신청 기간 아님
+          printf("\n현재는 동아리 등록 신청 기간이 아닙니다.\n");
+      }
       break;
     case 0:
       printf("로그아웃 합니다.\n");
@@ -198,6 +216,9 @@ int main() {
   MYSQL *conn;
   init_db(&conn);
 
+  // 비속어 필터 로드
+  load_slang_list("slang_list.txt");
+
   int choice;
   char logged_id[50];
 
@@ -206,6 +227,7 @@ int main() {
     printf("1. 로그인\n");
     printf("2. 회원가입\n");
     printf("0. 종료\n");
+    printf("=====================\n");
     printf("입력: ");
     scanf("%d", &choice);
 
@@ -227,5 +249,6 @@ int main() {
   }
 
   close_db(conn);
+  free_slang_list();
   return 0;
 }

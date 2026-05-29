@@ -20,6 +20,9 @@ void category_menu(MYSQL *conn) {
         printf("4. 카테고리 삭제\n");
         printf("0. 종료\n");
 
+        printf("=============================\n");
+        printf("입력: ");
+
         scanf("%d", &menu);
 
         switch (menu) {
