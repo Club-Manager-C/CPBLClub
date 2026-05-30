@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include "major_info.h"
 
 void run_admin_interface(MYSQL *conn);
 void view_clubs_by_category(MYSQL *conn, const char *logged_id);
@@ -54,10 +55,9 @@ void apply_club_leader(MYSQL *conn, const char *logged_id) {
   }
   category_id = cat_ids[choice - 1];
 
-  char major[50] = "";
+  int college_code = 0, major_code = 0;
   if (category_id == 1) { // 1 is '전공' 카테고리
-      printf("해당 전공 동아리의 전공(학과명)을 입력하세요: ");
-      scanf("%49s", major);
+      select_college_and_major(&college_code, &major_code);
   }
 
   printf("지도 교수님 이름: ");
@@ -80,24 +80,21 @@ void apply_club_leader(MYSQL *conn, const char *logged_id) {
   }
 
   // 문자열 SQL 인젝션 방지를 위한 안전한 이스케이프
-  char esc_club_name[200], esc_prof[100], esc_hours[200], esc_desc[600], esc_logged_id[100], esc_major[100];
+  char esc_club_name[200], esc_prof[100], esc_hours[200], esc_desc[600], esc_logged_id[100];
   mysql_real_escape_string(conn, esc_club_name, club_name, strlen(club_name));
   mysql_real_escape_string(conn, esc_prof, professor_name, strlen(professor_name));
   mysql_real_escape_string(conn, esc_hours, operating_hours, strlen(operating_hours));
   mysql_real_escape_string(conn, esc_desc, description, strlen(description));
   mysql_real_escape_string(conn, esc_logged_id, logged_id, strlen(logged_id));
-  if (category_id == 1) {
-      mysql_real_escape_string(conn, esc_major, major, strlen(major));
-  }
 
   // DB에 삽입 (status는 기본값 '대기'로 저장)
   char query[2048];
   if (category_id == 1) {
       sprintf(query,
-              "INSERT INTO clubs (club_name, category_id, major, description, professor_name, "
+              "INSERT INTO clubs (club_name, category_id, college_code, major_code, description, professor_name, "
               "operating_hours, leader_idx, status) "
-              "VALUES ('%s', %d, '%s', '%s', '%s', '%s', (SELECT user_idx FROM users WHERE id = '%s'), '대기')",
-              esc_club_name, category_id, esc_major, esc_desc, esc_prof, esc_hours, esc_logged_id);
+              "VALUES ('%s', %d, %d, %d, '%s', '%s', '%s', (SELECT user_idx FROM users WHERE id = '%s'), '대기')",
+              esc_club_name, category_id, college_code, major_code, esc_desc, esc_prof, esc_hours, esc_logged_id);
   } else {
       sprintf(query,
               "INSERT INTO clubs (club_name, category_id, description, professor_name, "

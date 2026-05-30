@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <conio.h>
+#include "major_info.h"
 
 // ─────────────────────────────────────────────
 // 비밀번호 별표 마스킹 입력 헬퍼 함수
@@ -195,15 +196,14 @@ void register_screen(MYSQL *conn) {
   printf("이름: ");
   scanf("%s", new_account.name);
 
-  printf("전공: ");
-  scanf("%s", new_account.major);
+  select_college_and_major(&new_account.college_code, &new_account.major_code);
 
   printf("전화번호 (예: 010-1234-5678): ");
   scanf("%s", new_account.phone);
 
   if (register_user(conn, new_account.id, new_account.pw,
                     new_account.nickname, new_account.student_id,
-                    new_account.name, new_account.major,
+                    new_account.name, new_account.college_code, new_account.major_code,
                     new_account.phone)) {
     printf("회원가입이 성공적으로 완료되었습니다!\n");
   }

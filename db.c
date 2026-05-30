@@ -5,6 +5,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <stdbool.h>
+#include "major_info.h"
 
 const char *DB_HOST = "localhost";
 const char *DB_USER = "root";
@@ -31,7 +32,8 @@ void init_db(MYSQL **conn) {
   // 한글 깨짐 방지: 클라이언트 연결 인코딩을 utf8로 설정
   mysql_set_character_set(*conn, "utf8");
 
-  mysql_query(*conn, "CREATE DATABASE IF NOT EXISTS cpbl_db");
+  mysql_query(*conn, "DROP DATABASE IF EXISTS cpbl_db");
+  mysql_query(*conn, "CREATE DATABASE cpbl_db");
   mysql_select_db(*conn, DB_NAME);
 
   // ① 동아리 카테고리 테이블
@@ -55,7 +57,8 @@ void init_db(MYSQL **conn) {
                      "pw VARCHAR(255) NOT NULL, "
                      "nickname VARCHAR(30) NOT NULL UNIQUE, "
                      "student_id VARCHAR(10) NOT NULL UNIQUE, "
-                     "major VARCHAR(50) NOT NULL, "
+                     "college_code INT NOT NULL, "
+                     "major_code INT NOT NULL, "
                      "name VARCHAR(20) NOT NULL, "
                      "phone VARCHAR(15) NOT NULL UNIQUE, "
                      "role ENUM('User', 'Admin') NOT NULL DEFAULT 'User', "
@@ -80,15 +83,15 @@ void init_db(MYSQL **conn) {
       "operating_hours VARCHAR(100) NULL, "
       "status ENUM('대기', '승인', '거절') DEFAULT '대기', "
       "reject_reason VARCHAR(255) NULL, "
-      "major VARCHAR(50) NULL, "
+      "college_code INT NULL, "
+      "major_code INT NULL, "
       "leader_idx INT NULL, "
       "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
       "FOREIGN KEY (category_id) REFERENCES club_categories (category_id), "
       "FOREIGN KEY (leader_idx) REFERENCES users (user_idx) ON DELETE SET "
       "NULL)");
 
-  // 마이그레이션: 동아리 테이블에 major 필드 추가 (기존 테이블 존재 시 대비)
-  mysql_query(*conn, "ALTER TABLE clubs ADD COLUMN major VARCHAR(50) NULL");
+  // (마이그레이션 제거됨)
 
   // ⑤ 동아리 멤버 테이블 (N:M 관계 해소 및 마이페이지 직책 표시용)
   mysql_query(
@@ -220,9 +223,9 @@ void init_db(MYSQL **conn) {
       "'운동')");
 
   mysql_query(*conn, "INSERT IGNORE INTO users (user_idx, id, pw, nickname, "
-                     "student_id, major, name, phone, role, is_approved) "
+                     "student_id, college_code, major_code, name, phone, role, is_approved) "
                      "VALUES (1, 'admin', 'admin1234', '관리자', '00000000', "
-                     "'컴퓨터공학', '관리자', '010-0000-0000', 'Admin', 1)");
+                     "1, 1, '관리자', '010-0000-0000', 'Admin', 1)");
 
   mysql_query(*conn, "INSERT IGNORE INTO clubs (club_id, club_name, category_id, leader_idx, status, description) "
                      "VALUES (1, '기본 동아리', 1, 1, '승인', '시스템 기본 설정 동아리입니다.')");
@@ -305,13 +308,13 @@ int check_student_id_duplicate(MYSQL *conn, long long student_id) {
 
 int register_user(MYSQL *conn, const char *id, const char *pw,
                   const char *nickname, long long student_id, const char *name,
-                  const char *major, const char *phone) {
+                  int college_code, int major_code, const char *phone) {
   char query[768];
   sprintf(
       query,
-      "INSERT INTO users (id, pw, nickname, student_id, name, major, phone) "
-      "VALUES ('%s', '%s', '%s', '%lld', '%s', '%s', '%s')",
-      id, pw, nickname, student_id, name, major, phone);
+      "INSERT INTO users (id, pw, nickname, student_id, name, college_code, major_code, phone) "
+      "VALUES ('%s', '%s', '%s', '%lld', '%s', %d, %d, '%s')",
+      id, pw, nickname, student_id, name, college_code, major_code, phone);
 
   if (mysql_query(conn, query)) {
     fprintf(stderr, "회원가입 실패: %s\n", mysql_error(conn));
@@ -371,7 +374,7 @@ int update_post(MYSQL *conn, int post_id, const char *user_id,
 void get_posts_by_category(MYSQL *conn, int category_id) {
   char query[512];
   sprintf(query,
-          "SELECT p.post_id, p.title, u.name, u.major, c.club_name, p.created_at "
+          "SELECT p.post_id, p.title, u.name, u.college_code, u.major_code, c.club_name, c.college_code, c.major_code, p.created_at "
           "FROM posts p "
           "JOIN users u ON p.user_idx = u.user_idx "
           "JOIN clubs c ON p.club_id = c.club_id "
@@ -393,13 +396,28 @@ void get_posts_by_category(MYSQL *conn, int category_id) {
     return;
   }
 
-  printf("%-6s %-30s %-45s %-20s\n", "ID", "제목", "작성자 정보", "작성일");
-  printf("--------------------------------------------------------------------------------------------------------\n");
+  printf("%-6s %-40s %-45s %-20s\n", "ID", "제목", "작성자 정보", "작성일");
+  printf("------------------------------------------------------------------------------------------------------------------\n");
   MYSQL_ROW row;
   while ((row = mysql_fetch_row(res))) {
     char author_info[100];
-    sprintf(author_info, "[작성자: %s (%s) | 등록 동아리: %s]", row[2], row[3], row[4]);
-    printf("[%-4s] %-30s %-45s %s\n", row[0], row[1], author_info, row[5]);
+    int u_col = atoi(row[3]);
+    int u_maj = atoi(row[4]);
+    sprintf(author_info, "[작성자: %s (%s) | 등록 동아리: %s]", row[2], get_major_name(u_col, u_maj), row[5]);
+    
+    char title_str[150];
+    if (row[6] && row[7]) {
+        int c_col = atoi(row[6]);
+        int c_maj = atoi(row[7]);
+        if (c_col > 0) {
+            sprintf(title_str, "[%s-%s] %s", get_college_name(c_col), get_major_name(c_col, c_maj), row[1]);
+        } else {
+            strcpy(title_str, row[1]);
+        }
+    } else {
+        strcpy(title_str, row[1]);
+    }
+    printf("[%-4s] %-40s %-45s %s\n", row[0], title_str, author_info, row[8]);
   }
   mysql_free_result(res);
 }
@@ -413,7 +431,7 @@ int search_posts_by_keyword(MYSQL *conn, int category_id, const char *keyword) {
 
   char query[1024];
   sprintf(query,
-          "SELECT p.post_id, p.title, u.name, u.major, c.club_name, p.created_at "
+          "SELECT p.post_id, p.title, u.name, u.college_code, u.major_code, c.club_name, c.college_code, c.major_code, p.created_at "
           "FROM posts p "
           "JOIN users u ON p.user_idx = u.user_idx "
           "JOIN clubs c ON p.club_id = c.club_id "
@@ -437,13 +455,28 @@ int search_posts_by_keyword(MYSQL *conn, int category_id, const char *keyword) {
   }
 
   printf("\n=== 검색 결과 목록 (최신순) ===\n");
-  printf("%-6s %-30s %-45s %-20s\n", "ID", "제목", "작성자 정보", "작성일");
-  printf("--------------------------------------------------------------------------------------------------------\n");
+  printf("%-6s %-40s %-45s %-20s\n", "ID", "제목", "작성자 정보", "작성일");
+  printf("------------------------------------------------------------------------------------------------------------------\n");
   MYSQL_ROW row;
   while ((row = mysql_fetch_row(res))) {
     char author_info[100];
-    sprintf(author_info, "[작성자: %s (%s) | 등록 동아리: %s]", row[2], row[3], row[4]);
-    printf("[%-4s] %-30s %-45s %s\n", row[0], row[1], author_info, row[5]);
+    int u_col = atoi(row[3]);
+    int u_maj = atoi(row[4]);
+    sprintf(author_info, "[작성자: %s (%s) | 등록 동아리: %s]", row[2], get_major_name(u_col, u_maj), row[5]);
+    
+    char title_str[150];
+    if (row[6] && row[7]) {
+        int c_col = atoi(row[6]);
+        int c_maj = atoi(row[7]);
+        if (c_col > 0) {
+            sprintf(title_str, "[%s-%s] %s", get_college_name(c_col), get_major_name(c_col, c_maj), row[1]);
+        } else {
+            strcpy(title_str, row[1]);
+        }
+    } else {
+        strcpy(title_str, row[1]);
+    }
+    printf("[%-4s] %-40s %-45s %s\n", row[0], title_str, author_info, row[8]);
   }
   mysql_free_result(res);
   return row_count;
@@ -783,7 +816,7 @@ void display_my_profile(MYSQL *conn, const char *logged_id) {
     printf("=======================================\n");
 
     sprintf(query, 
-        "SELECT user_idx, name, student_id, major "
+        "SELECT user_idx, name, student_id, college_code, major_code "
         "FROM users WHERE id = '%s'", esc_id);
 
     if (mysql_query(conn, query)) {
@@ -800,11 +833,13 @@ void display_my_profile(MYSQL *conn, const char *logged_id) {
 
     MYSQL_ROW row_user = mysql_fetch_row(res_user);
     int user_idx = atoi(row_user[0]);
+    int u_col = atoi(row_user[3]);
+    int u_maj = atoi(row_user[4]);
     
     printf(" [기본 정보]\n");
     printf(" - 이름: %s\n", row_user[1]);
     printf(" - 학번: %s\n", row_user[2]);
-    printf(" - 전공: %s\n", row_user[3]);
+    printf(" - 전공: %s\n", get_major_name(u_col, u_maj));
     mysql_free_result(res_user);
 
     printf("\n [가입된 동아리 목록]\n");

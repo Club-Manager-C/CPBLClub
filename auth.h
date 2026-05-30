@@ -11,7 +11,8 @@ typedef struct {
   char nickname[50];
   long long student_id; // 10자리 학번
   char name[50];        // 이름
-  char major[50];       // 전공
+  int college_code;     // 단과대 코드
+  int major_code;       // 전공 코드
   char phone[20];       // 전화번호
 } Account;
 

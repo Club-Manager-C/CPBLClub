@@ -22,6 +22,7 @@
                 "category.c",
                 "filter.c",
                 "apply_period.c",
+                "major_info.c",
                 "-o",
                 "CPBL.exe",
                 "-I",
