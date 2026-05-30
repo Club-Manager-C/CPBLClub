@@ -241,8 +241,10 @@ void write_post_menu(MYSQL *conn, int category_id, const char *logged_id) {
 int print_post_detail(MYSQL *conn, int post_id) {
   char query[512];
   sprintf(query,
-          "SELECT p.title, p.content, u.nickname, p.created_at, p.like_count "
-          "FROM posts p JOIN users u ON p.user_idx = u.user_idx "
+          "SELECT p.title, p.content, u.name, u.major, c.club_name, p.created_at, p.like_count "
+          "FROM posts p "
+          "JOIN users u ON p.user_idx = u.user_idx "
+          "JOIN clubs c ON p.club_id = c.club_id "
           "WHERE p.post_id = %d",
           post_id);
   if (mysql_query(conn, query)) {
@@ -258,7 +260,8 @@ int print_post_detail(MYSQL *conn, int post_id) {
   MYSQL_ROW row = mysql_fetch_row(res);
   printf("\n==================================================\n");
   printf(" 제목: %s\n", row[0]);
-  printf(" 작성자: %s | 작성일: %s | 좋아요: %s\n", row[2], row[3], row[4]);
+  printf(" [작성자: %s (%s) | 등록 동아리: %s]\n", row[2], row[3], row[4]);
+  printf(" 작성일: %s | 좋아요: %s\n", row[5], row[6]);
   printf("--------------------------------------------------\n");
   printf(" %s\n", row[1]);
   printf("==================================================\n");

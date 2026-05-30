@@ -299,6 +299,154 @@ void send_announcement_menu(MYSQL *conn, const char *logged_id) {
     send_club_announcement(conn, club_id, logged_id, content);
 }
 
+void manage_join_requests(MYSQL *conn, const char *logged_id) {
+    char query[1024];
+    char esc_logged_id[100];
+    mysql_real_escape_string(conn, esc_logged_id, logged_id, strlen(logged_id));
+
+    while (1) {
+        if (is_currently_suspended(conn, logged_id)) return;
+        printf("\n=== 가입 신청 관리 (동아리장 전용) ===\n");
+        
+        sprintf(query, 
+            "SELECT j.request_id, u.student_id, u.name, u.major, j.introduction, c.club_name "
+            "FROM joinrequests j "
+            "JOIN users u ON j.user_idx = u.user_idx "
+            "JOIN clubs c ON j.club_id = c.club_id "
+            "JOIN clubmembers cm ON c.club_id = cm.club_id "
+            "WHERE cm.user_idx = (SELECT user_idx FROM users WHERE id='%s') "
+            "AND cm.role = 'Leader' AND j.status = '대기'", esc_logged_id);
+
+        if (mysql_query(conn, query)) {
+            fprintf(stderr, "대기 목록 조회 실패: %s\n", mysql_error(conn));
+            return;
+        }
+
+        MYSQL_RES *res = mysql_store_result(conn);
+        if (res == NULL) {
+            fprintf(stderr, "결과셋 로드 실패\n");
+            return;
+        }
+
+        int row_count = mysql_num_rows(res);
+        if (row_count == 0) {
+            printf("대기 중인 가입 신청이 없습니다.\n");
+            mysql_free_result(res);
+            return;
+        }
+
+        printf("%-8s %-15s %-15s %-20s %-20s\n", "신청ID", "학번", "이름", "전공", "동아리명");
+        printf("--------------------------------------------------------------------------------\n");
+
+        MYSQL_ROW row;
+        while ((row = mysql_fetch_row(res))) {
+            printf("%-8s %-15s %-15s %-20s %-20s\n", 
+                   row[0], row[1], row[2], row[3], row[5]);
+            printf("   자기소개: %s\n", row[4]);
+            printf("--------------------------------------------------------------------------------\n");
+        }
+        mysql_free_result(res);
+
+        int target_req_id;
+        printf("\n승인/거절 처리할 신청 ID (0: 뒤로가기): ");
+        if (scanf("%d", &target_req_id) != 1) {
+            while (getchar() != '\n');
+            printf("잘못된 입력입니다.\n");
+            continue;
+        }
+        if (target_req_id == 0) return;
+
+        sprintf(query,
+            "SELECT j.club_id, u.id, u.name, c.club_name "
+            "FROM joinrequests j "
+            "JOIN users u ON j.user_idx = u.user_idx "
+            "JOIN clubs c ON j.club_id = c.club_id "
+            "JOIN clubmembers cm ON c.club_id = cm.club_id "
+            "WHERE j.request_id = %d AND j.status = '대기' "
+            "AND cm.user_idx = (SELECT user_idx FROM users WHERE id='%s') AND cm.role = 'Leader'",
+            target_req_id, esc_logged_id);
+            
+        if (mysql_query(conn, query)) {
+            fprintf(stderr, "검증 쿼리 실패: %s\n", mysql_error(conn));
+            continue;
+        }
+
+        MYSQL_RES *check_res = mysql_store_result(conn);
+        if (check_res == NULL || mysql_num_rows(check_res) == 0) {
+            printf("해당 신청 내역이 존재하지 않거나 권한이 없습니다.\n");
+            if (check_res) mysql_free_result(check_res);
+            continue;
+        }
+
+        MYSQL_ROW check_row = mysql_fetch_row(check_res);
+        int club_id = atoi(check_row[0]);
+        char applicant_id[50]; strcpy(applicant_id, check_row[1]);
+        char applicant_name[50]; strcpy(applicant_name, check_row[2]);
+        char club_name[100]; strcpy(club_name, check_row[3]);
+        mysql_free_result(check_res);
+
+        int action;
+        printf("\n신청자: %s\n", applicant_name);
+        printf("1. 승인  2. 거절  0. 취소\n입력: ");
+        if (scanf("%d", &action) != 1) {
+            while(getchar() != '\n');
+            printf("잘못된 입력입니다.\n");
+            continue;
+        }
+
+        if (action == 1) {
+            sprintf(query, "UPDATE joinrequests SET status = '승인' WHERE request_id = %d", target_req_id);
+            mysql_query(conn, query);
+
+            sprintf(query, "INSERT IGNORE INTO clubmembers (club_id, user_idx, role) VALUES (%d, (SELECT user_idx FROM users WHERE id = '%s'), 'Member')", club_id, applicant_id);
+            mysql_query(conn, query);
+
+            char msg_content[500];
+            sprintf(msg_content, "축하합니다! [%s] 동아리 가입이 승인되었습니다.", club_name);
+            insert_message(conn, applicant_id, msg_content);
+
+            printf("✅ [%s] 님의 가입 신청이 승인되었습니다.\n", applicant_name);
+        } else if (action == 2) {
+            sprintf(query, "UPDATE joinrequests SET status = '거절' WHERE request_id = %d", target_req_id);
+            mysql_query(conn, query);
+
+            char msg_content[500];
+            sprintf(msg_content, "[%s] 동아리 가입 신청이 거절되었습니다.", club_name);
+            insert_message(conn, applicant_id, msg_content);
+
+            printf("❌ [%s] 님의 가입 신청이 거절되었습니다.\n", applicant_name);
+        } else {
+            printf("취소되었습니다.\n");
+        }
+    }
+}
+
+void club_leader_menu(MYSQL *conn, const char *logged_id) {
+    int choice;
+    while (1) {
+        if (is_currently_suspended(conn, logged_id)) return;
+        printf("\n============================\n");
+        printf("  동아리장 관리 메뉴\n");
+        printf("============================\n");
+        printf("1. 단체 공지 발송\n");
+        printf("2. 가입 신청 관리\n");
+        printf("0. 뒤로\n");
+        printf("============================\n");
+        printf("입력: ");
+        if (scanf("%d", &choice) != 1) {
+            while(getchar() != '\n');
+            continue;
+        }
+
+        switch (choice) {
+            case 1: send_announcement_menu(conn, logged_id); break;
+            case 2: manage_join_requests(conn, logged_id); break;
+            case 0: return;
+            default: printf("잘못된 입력입니다.\n");
+        }
+    }
+}
+
 // ─────────────────────────────────────────────
 // 마이페이지 메인
 // ─────────────────────────────────────────────
@@ -315,8 +463,8 @@ void my_page(MYSQL *conn, const char *logged_id) {
     printf("2. 내 댓글 확인/수정\n");
     printf("3. 메시지함\n");
     printf("4. 쪽지 보내기\n");
-    printf("5. 단체 공지 발송 (동아리장)\n");
-    printf("6. 시간표 확인/수정\n");
+    printf("5. 시간표 확인/수정\n");
+    printf("6. 동아리장 관리 메뉴 (동아리장 전용)\n");
     printf("0. 뒤로\n");
     printf("============================\n");
     printf("입력: ");
@@ -328,8 +476,8 @@ void my_page(MYSQL *conn, const char *logged_id) {
       case 2: my_comments_menu(conn, logged_id); break;
       case 3: viewMyMessages(conn, logged_id);   break;
       case 4: send_dm_menu(conn, logged_id);     break;
-      case 5: send_announcement_menu(conn, logged_id); break;
-      case 6: my_schedule_menu(conn, logged_id); break;
+      case 5: my_schedule_menu(conn, logged_id); break;
+      case 6: club_leader_menu(conn, logged_id); break;
       case 0: return;
       default: printf("잘못된 입력입니다.\n");
     }

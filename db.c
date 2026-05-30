@@ -371,7 +371,7 @@ int update_post(MYSQL *conn, int post_id, const char *user_id,
 void get_posts_by_category(MYSQL *conn, int category_id) {
   char query[512];
   sprintf(query,
-          "SELECT p.post_id, p.title, u.nickname, p.created_at "
+          "SELECT p.post_id, p.title, u.name, u.major, c.club_name, p.created_at "
           "FROM posts p "
           "JOIN users u ON p.user_idx = u.user_idx "
           "JOIN clubs c ON p.club_id = c.club_id "
@@ -393,12 +393,13 @@ void get_posts_by_category(MYSQL *conn, int category_id) {
     return;
   }
 
-  printf("%-6s %-30s %-15s %-20s\n", "ID", "제목", "작성자", "작성일");
-  printf("---------------------------------------------------------------------"
-         "-----\n");
+  printf("%-6s %-30s %-45s %-20s\n", "ID", "제목", "작성자 정보", "작성일");
+  printf("--------------------------------------------------------------------------------------------------------\n");
   MYSQL_ROW row;
   while ((row = mysql_fetch_row(res))) {
-    printf("[%-4s] %-30s %-15s %s\n", row[0], row[1], row[2], row[3]);
+    char author_info[100];
+    sprintf(author_info, "[작성자: %s (%s) | 등록 동아리: %s]", row[2], row[3], row[4]);
+    printf("[%-4s] %-30s %-45s %s\n", row[0], row[1], author_info, row[5]);
   }
   mysql_free_result(res);
 }
@@ -412,7 +413,7 @@ int search_posts_by_keyword(MYSQL *conn, int category_id, const char *keyword) {
 
   char query[1024];
   sprintf(query,
-          "SELECT p.post_id, p.title, u.nickname, p.created_at "
+          "SELECT p.post_id, p.title, u.name, u.major, c.club_name, p.created_at "
           "FROM posts p "
           "JOIN users u ON p.user_idx = u.user_idx "
           "JOIN clubs c ON p.club_id = c.club_id "
@@ -436,11 +437,13 @@ int search_posts_by_keyword(MYSQL *conn, int category_id, const char *keyword) {
   }
 
   printf("\n=== 검색 결과 목록 (최신순) ===\n");
-  printf("%-6s %-30s %-15s %-20s\n", "ID", "제목", "작성자", "작성일");
-  printf("--------------------------------------------------------------------------\n");
+  printf("%-6s %-30s %-45s %-20s\n", "ID", "제목", "작성자 정보", "작성일");
+  printf("--------------------------------------------------------------------------------------------------------\n");
   MYSQL_ROW row;
   while ((row = mysql_fetch_row(res))) {
-    printf("[%-4s] %-30s %-15s %s\n", row[0], row[1], row[2], row[3]);
+    char author_info[100];
+    sprintf(author_info, "[작성자: %s (%s) | 등록 동아리: %s]", row[2], row[3], row[4]);
+    printf("[%-4s] %-30s %-45s %s\n", row[0], row[1], author_info, row[5]);
   }
   mysql_free_result(res);
   return row_count;

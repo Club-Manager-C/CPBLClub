@@ -3,6 +3,22 @@
 
 #include "db.h"
 
+// 가입 신청 상태
+typedef enum JoinRequestStatus {
+    PENDING = 0,
+    APPROVED = 1,
+    REJECTED = 2
+} JoinRequestStatus;
+
+// 가입 신청 구조체
+typedef struct JoinRequest {
+    int request_id;
+    int club_id;
+    int user_idx;
+    char introduction[500];
+    JoinRequestStatus status;
+} JoinRequest;
+
 // 댓글 구조체 (좋아요 수 필드 추가)
 typedef struct Comment {
     int comment_id;
