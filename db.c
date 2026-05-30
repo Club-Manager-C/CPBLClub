@@ -80,11 +80,15 @@ void init_db(MYSQL **conn) {
       "operating_hours VARCHAR(100) NULL, "
       "status ENUM('대기', '승인', '거절') DEFAULT '대기', "
       "reject_reason VARCHAR(255) NULL, "
+      "major VARCHAR(50) NULL, "
       "leader_idx INT NULL, "
       "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
       "FOREIGN KEY (category_id) REFERENCES club_categories (category_id), "
       "FOREIGN KEY (leader_idx) REFERENCES users (user_idx) ON DELETE SET "
       "NULL)");
+
+  // 마이그레이션: 동아리 테이블에 major 필드 추가 (기존 테이블 존재 시 대비)
+  mysql_query(*conn, "ALTER TABLE clubs ADD COLUMN major VARCHAR(50) NULL");
 
   // ⑤ 동아리 멤버 테이블 (N:M 관계 해소 및 마이페이지 직책 표시용)
   mysql_query(
@@ -367,9 +371,11 @@ int update_post(MYSQL *conn, int post_id, const char *user_id,
 void get_posts_by_category(MYSQL *conn, int category_id) {
   char query[512];
   sprintf(query,
-          "SELECT p.post_id, p.title, u.nickname, p.created_at "
-          "FROM posts p JOIN users u ON p.user_idx = u.user_idx "
-          "WHERE p.type_id = %d ORDER BY p.created_at DESC",
+          "SELECT p.post_id, p.title, u.name, u.major, c.club_name, p.created_at "
+          "FROM posts p "
+          "JOIN users u ON p.user_idx = u.user_idx "
+          "JOIN clubs c ON p.club_id = c.club_id "
+          "WHERE c.category_id = %d ORDER BY p.created_at DESC",
           category_id);
 
   if (mysql_query(conn, query)) {
@@ -387,12 +393,13 @@ void get_posts_by_category(MYSQL *conn, int category_id) {
     return;
   }
 
-  printf("%-6s %-30s %-15s %-20s\n", "ID", "제목", "작성자", "작성일");
-  printf("---------------------------------------------------------------------"
-         "-----\n");
+  printf("%-6s %-30s %-45s %-20s\n", "ID", "제목", "작성자 정보", "작성일");
+  printf("--------------------------------------------------------------------------------------------------------\n");
   MYSQL_ROW row;
   while ((row = mysql_fetch_row(res))) {
-    printf("[%-4s] %-30s %-15s %s\n", row[0], row[1], row[2], row[3]);
+    char author_info[100];
+    sprintf(author_info, "[작성자: %s (%s) | 등록 동아리: %s]", row[2], row[3], row[4]);
+    printf("[%-4s] %-30s %-45s %s\n", row[0], row[1], author_info, row[5]);
   }
   mysql_free_result(res);
 }
@@ -406,9 +413,11 @@ int search_posts_by_keyword(MYSQL *conn, int category_id, const char *keyword) {
 
   char query[1024];
   sprintf(query,
-          "SELECT p.post_id, p.title, u.nickname, p.created_at "
-          "FROM posts p JOIN users u ON p.user_idx = u.user_idx "
-          "WHERE p.type_id = %d AND (p.title LIKE '%%%s%%' OR p.content LIKE '%%%s%%') "
+          "SELECT p.post_id, p.title, u.name, u.major, c.club_name, p.created_at "
+          "FROM posts p "
+          "JOIN users u ON p.user_idx = u.user_idx "
+          "JOIN clubs c ON p.club_id = c.club_id "
+          "WHERE c.category_id = %d AND (p.title LIKE '%%%s%%' OR p.content LIKE '%%%s%%') "
           "ORDER BY p.created_at DESC",
           category_id, esc_keyword, esc_keyword);
 
@@ -428,11 +437,13 @@ int search_posts_by_keyword(MYSQL *conn, int category_id, const char *keyword) {
   }
 
   printf("\n=== 검색 결과 목록 (최신순) ===\n");
-  printf("%-6s %-30s %-15s %-20s\n", "ID", "제목", "작성자", "작성일");
-  printf("--------------------------------------------------------------------------\n");
+  printf("%-6s %-30s %-45s %-20s\n", "ID", "제목", "작성자 정보", "작성일");
+  printf("--------------------------------------------------------------------------------------------------------\n");
   MYSQL_ROW row;
   while ((row = mysql_fetch_row(res))) {
-    printf("[%-4s] %-30s %-15s %s\n", row[0], row[1], row[2], row[3]);
+    char author_info[100];
+    sprintf(author_info, "[작성자: %s (%s) | 등록 동아리: %s]", row[2], row[3], row[4]);
+    printf("[%-4s] %-30s %-45s %s\n", row[0], row[1], author_info, row[5]);
   }
   mysql_free_result(res);
   return row_count;
@@ -601,7 +612,7 @@ int get_user_idx_by_id(MYSQL *conn, const char *user_id) {
 // 신규 게시판 및 댓글 제어 함수군
 // ─────────────────────────────────────────────────
 
-int insert_post(MYSQL *conn, const char *user_id, int category_id,
+int insert_post(MYSQL *conn, int club_id, const char *user_id, int category_id,
                 const char *title, const char *content) {
   char esc_title[500], esc_content[2500], esc_user_id[100];
   mysql_real_escape_string(conn, esc_title, title, strlen(title));
@@ -609,11 +620,12 @@ int insert_post(MYSQL *conn, const char *user_id, int category_id,
   mysql_real_escape_string(conn, esc_user_id, user_id, strlen(user_id));
 
   char query[4000];
+  // type_id는 1(기본 게시판)로 고정하고, 카테고리 분류는 동아리의 category_id를 통해 필터링합니다.
   sprintf(
       query,
       "INSERT INTO posts (club_id, user_idx, type_id, title, content) VALUES "
-      "(1, (SELECT user_idx FROM users WHERE id = '%s'), %d, '%s', '%s')",
-      esc_user_id, category_id, esc_title, esc_content);
+      "(%d, (SELECT user_idx FROM users WHERE id = '%s'), 1, '%s', '%s')",
+      club_id, esc_user_id, esc_title, esc_content);
   if (mysql_query(conn, query)) {
     fprintf(stderr, "게시글 작성 실패: %s\n", mysql_error(conn));
     return 0;
@@ -698,6 +710,16 @@ int has_user_liked_comment(MYSQL *conn, int comment_id, const char *user_id) {
     mysql_free_result(res);
   }
   return liked;
+}
+
+int like_post(MYSQL *conn, int post_id, const char *logged_id) {
+    char query[256];
+    sprintf(query, "UPDATE posts SET like_count = like_count + 1 WHERE post_id = %d", post_id);
+    if (mysql_query(conn, query)) {
+        fprintf(stderr, "게시글 좋아요 실패: %s\n", mysql_error(conn));
+        return 0;
+    }
+    return 1;
 }
 
 int is_user_club_leader(MYSQL *conn, const char *user_id) {
