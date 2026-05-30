@@ -11,7 +11,7 @@ int check_nickname_duplicate(MYSQL *conn, const char *nickname);
 int check_student_id_duplicate(MYSQL *conn, long long student_id);
 int register_user(MYSQL *conn, const char *id, const char *pw,
                   const char *nickname, long long student_id, const char *name,
-                  const char *major, const char *phone);
+                  int college_code, int major_code, const char *phone);
 void close_db(MYSQL *conn);
 int insert_message(MYSQL *conn, const char *user_id, const char *content);
 int get_user_idx_by_id(MYSQL *conn, const char *user_id);

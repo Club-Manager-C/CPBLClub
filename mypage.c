@@ -3,6 +3,7 @@
 #include "filter.h"
 #include <stdio.h>
 #include <string.h>
+#include "major_info.h"
 
 // ─────────────────────────────────────────────
 // 헬퍼① — 내 게시글 확인/수정
@@ -309,7 +310,7 @@ void manage_join_requests(MYSQL *conn, const char *logged_id) {
         printf("\n=== 가입 신청 관리 (동아리장 전용) ===\n");
         
         sprintf(query, 
-            "SELECT j.request_id, u.student_id, u.name, u.major, j.introduction, c.club_name "
+            "SELECT j.request_id, u.student_id, u.name, u.college_code, u.major_code, j.introduction, c.club_name "
             "FROM joinrequests j "
             "JOIN users u ON j.user_idx = u.user_idx "
             "JOIN clubs c ON j.club_id = c.club_id "
@@ -340,9 +341,11 @@ void manage_join_requests(MYSQL *conn, const char *logged_id) {
 
         MYSQL_ROW row;
         while ((row = mysql_fetch_row(res))) {
+            int u_col = atoi(row[3]);
+            int u_maj = atoi(row[4]);
             printf("%-8s %-15s %-15s %-20s %-20s\n", 
-                   row[0], row[1], row[2], row[3], row[5]);
-            printf("   자기소개: %s\n", row[4]);
+                   row[0], row[1], row[2], get_major_name(u_col, u_maj), row[6]);
+            printf("   자기소개: %s\n", row[5]);
             printf("--------------------------------------------------------------------------------\n");
         }
         mysql_free_result(res);
@@ -447,6 +450,92 @@ void club_leader_menu(MYSQL *conn, const char *logged_id) {
     }
 }
 
+void edit_my_info(MYSQL *conn, const char *logged_id) {
+    char esc_id[100];
+    mysql_real_escape_string(conn, esc_id, logged_id, strlen(logged_id));
+    
+    char pw[50];
+    printf("\n비밀번호를 입력하세요: ");
+    scanf("%s", pw);
+    
+    if (check_login(conn, logged_id, pw) != 1) {
+        printf("비밀번호가 일치하지 않습니다.\n");
+        return;
+    }
+    
+    char new_nickname[50], new_pw[50];
+    printf("새 닉네임: ");
+    scanf("%s", new_nickname);
+    
+    char esc_nick[100];
+    mysql_real_escape_string(conn, esc_nick, new_nickname, strlen(new_nickname));
+    
+    char query[512];
+    sprintf(query, "SELECT 1 FROM users WHERE nickname='%s' AND id != '%s'", esc_nick, esc_id);
+    if (mysql_query(conn, query) == 0) {
+        MYSQL_RES *res = mysql_store_result(conn);
+        if (res && mysql_num_rows(res) > 0) {
+            printf("이미 존재하는 닉네임입니다.\n");
+            mysql_free_result(res);
+            return;
+        }
+        if (res) mysql_free_result(res);
+    }
+    
+    printf("새 비밀번호: ");
+    scanf("%s", new_pw);
+    
+    char esc_pw[100];
+    mysql_real_escape_string(conn, esc_pw, new_pw, strlen(new_pw));
+    
+    sprintf(query, "UPDATE users SET nickname='%s', pw='%s' WHERE id='%s'", esc_nick, esc_pw, esc_id);
+    if (mysql_query(conn, query)) {
+        printf("정보 수정 실패: %s\n", mysql_error(conn));
+    } else {
+        printf("✅ 정보가 성공적으로 수정되었습니다.\n");
+    }
+}
+
+void delete_my_account(MYSQL *conn, const char *logged_id) {
+    char esc_id[100];
+    mysql_real_escape_string(conn, esc_id, logged_id, strlen(logged_id));
+    
+    char query[512];
+    sprintf(query, "SELECT count(*) FROM clubmembers WHERE user_idx = (SELECT user_idx FROM users WHERE id='%s') AND role = 'Leader'", esc_id);
+    if (mysql_query(conn, query) == 0) {
+        MYSQL_RES *res = mysql_store_result(conn);
+        if (res) {
+            MYSQL_ROW row = mysql_fetch_row(res);
+            if (row && atoi(row[0]) > 0) {
+                printf("\n❌ 동아리장(OWNER) 권한을 가진 동아리가 있어 탈퇴할 수 없습니다. 위임이나 폐쇄를 먼저 진행해주세요.\n");
+                mysql_free_result(res);
+                return;
+            }
+            mysql_free_result(res);
+        }
+    }
+    
+    char pw[50];
+    printf("\n탈퇴하시려면 비밀번호를 입력하세요: ");
+    scanf("%s", pw);
+    if (check_login(conn, logged_id, pw) != 1) {
+        printf("비밀번호가 일치하지 않습니다.\n");
+        return;
+    }
+    
+    sprintf(query, "DELETE FROM users WHERE id='%s'", esc_id);
+    if (mysql_query(conn, query)) {
+        printf("탈퇴 처리 실패: %s\n", mysql_error(conn));
+    } else {
+        printf("\n✅ 회원 탈퇴가 완료되었습니다. 이용해 주셔서 감사합니다.\n");
+        // Force logout by exiting the my_page loop (the caller should handle it)
+        // Since my_page doesn't have a way to force logout to main easily without global variable,
+        // we'll just return and let the user log out manually or we can exit the program.
+        printf("프로그램을 종료합니다.\n");
+        exit(0);
+    }
+}
+
 // ─────────────────────────────────────────────
 // 마이페이지 메인
 // ─────────────────────────────────────────────
@@ -465,11 +554,15 @@ void my_page(MYSQL *conn, const char *logged_id) {
     printf("4. 쪽지 보내기\n");
     printf("5. 시간표 확인/수정\n");
     printf("6. 동아리장 관리 메뉴 (동아리장 전용)\n");
+    printf("7. 내 정보 수정\n");
+    printf("8. 회원 탈퇴\n");
     printf("0. 뒤로\n");
     printf("============================\n");
     printf("입력: ");
-    scanf("%d", &choice);
-    getchar();
+    if (scanf("%d", &choice) != 1) {
+        while (getchar() != '\n');
+        continue;
+    }
 
     switch (choice) {
       case 1: my_posts_menu(conn, logged_id);    break;
@@ -478,6 +571,8 @@ void my_page(MYSQL *conn, const char *logged_id) {
       case 4: send_dm_menu(conn, logged_id);     break;
       case 5: my_schedule_menu(conn, logged_id); break;
       case 6: club_leader_menu(conn, logged_id); break;
+      case 7: edit_my_info(conn, logged_id);     break;
+      case 8: delete_my_account(conn, logged_id); break;
       case 0: return;
       default: printf("잘못된 입력입니다.\n");
     }

@@ -1,5 +1,7 @@
 #include "board.h"
 #include "filter.h"
+#include <stdbool.h>
+#include "major_info.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -241,7 +243,7 @@ void write_post_menu(MYSQL *conn, int category_id, const char *logged_id) {
 int print_post_detail(MYSQL *conn, int post_id) {
   char query[512];
   sprintf(query,
-          "SELECT p.title, p.content, u.name, u.major, c.club_name, p.created_at, p.like_count "
+          "SELECT p.title, p.content, u.name, u.college_code, u.major_code, c.club_name, c.college_code, c.major_code, p.created_at, p.like_count "
           "FROM posts p "
           "JOIN users u ON p.user_idx = u.user_idx "
           "JOIN clubs c ON p.club_id = c.club_id "
@@ -258,10 +260,27 @@ int print_post_detail(MYSQL *conn, int post_id) {
     return 0;
   }
   MYSQL_ROW row = mysql_fetch_row(res);
+  
+  char title_str[150];
+  if (row[6] && row[7]) {
+      int c_col = atoi(row[6]);
+      int c_maj = atoi(row[7]);
+      if (c_col > 0) {
+          sprintf(title_str, "[%s-%s] %s", get_college_name(c_col), get_major_name(c_col, c_maj), row[0]);
+      } else {
+          strcpy(title_str, row[0]);
+      }
+  } else {
+      strcpy(title_str, row[0]);
+  }
+  
+  int u_col = atoi(row[3]);
+  int u_maj = atoi(row[4]);
+
   printf("\n==================================================\n");
-  printf(" 제목: %s\n", row[0]);
-  printf(" [작성자: %s (%s) | 등록 동아리: %s]\n", row[2], row[3], row[4]);
-  printf(" 작성일: %s | 좋아요: %s\n", row[5], row[6]);
+  printf(" 제목: %s\n", title_str);
+  printf(" [작성자: %s (%s) | 등록 동아리: %s]\n", row[2], get_major_name(u_col, u_maj), row[5]);
+  printf(" 작성일: %s | 좋아요: %s\n", row[8], row[9]);
   printf("--------------------------------------------------\n");
   printf(" %s\n", row[1]);
   printf("==================================================\n");
@@ -565,7 +584,7 @@ void apply_for_club(MYSQL *conn, int club_id, const char *logged_id) {
     
     // 1. 가입자의 전공, 타겟 동아리의 카테고리(전공 여부) 및 동아리의 명시적 전공 조회
     sprintf(query, 
-        "SELECT c.category_id, c.major, u_applicant.major "
+        "SELECT c.category_id, c.college_code, c.major_code, u_applicant.college_code, u_applicant.major_code "
         "FROM clubs c "
         "JOIN users u_applicant ON u_applicant.id = '%s' "
         "WHERE c.club_id = %d", logged_id, club_id);
@@ -584,13 +603,16 @@ void apply_for_club(MYSQL *conn, int club_id, const char *logged_id) {
 
     MYSQL_ROW row = mysql_fetch_row(res);
     int category_id = atoi(row[0]);
-    const char *club_major = row[1];
-    const char *my_major = row[2];
+    int c_college = row[1] ? atoi(row[1]) : 0;
+    int c_major = row[2] ? atoi(row[2]) : 0;
+    int u_college = row[3] ? atoi(row[3]) : 0;
+    int u_major = row[4] ? atoi(row[4]) : 0;
     
     // 카테고리가 1(전공 동아리)일 경우 전공 일치 여부 확인
     if (category_id == 1) {
-        if (strcmp(club_major, my_major) != 0) {
-            printf("❌ 가입 실패: 해당 동아리의 전공(%s)과 본인의 전공(%s)이 일치하지 않아 신청할 수 없습니다.\n", club_major, my_major);
+        if (c_college != u_college || c_major != u_major) {
+            printf("❌ 가입 실패: 해당 동아리의 전공(%s)과 본인의 전공(%s)이 일치하지 않아 신청할 수 없습니다.\n", 
+                   get_major_name(c_college, c_major), get_major_name(u_college, u_major));
             mysql_free_result(res);
             return;
         }
