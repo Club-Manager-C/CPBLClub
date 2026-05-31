@@ -1,8 +1,10 @@
 #include "auth.h"
+#include "filter.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <conio.h>
+#include "major_info.h"
 
 // ─────────────────────────────────────────────
 // 비밀번호 별표 마스킹 입력 헬퍼 함수
@@ -72,9 +74,12 @@ int login_screen(MYSQL *conn, char *logged_id) {
       return 2; // 총관리자 로그인 성공 코드
     }
 
-    if (check_login(conn, logged_id, pw)) {
+    int login_res = check_login(conn, logged_id, pw);
+    if (login_res == 1) {
       printf("성공했습니다.\n");
       return 1;
+    } else if (login_res == -1) {
+      return 0; // 로그인 차단
     } else {
       fail_count++;
       printf("아이디 혹은 PW를 잘 못 입력했습니다.\n");
@@ -141,11 +146,17 @@ void register_screen(MYSQL *conn) {
   }
 
   // ── 닉네임 입력 ──
-  // 규칙: 중복 불가
+  // 규칙: 중복 불가, 비속어 포함 금지
   int valid_nick = 0;
   while (!valid_nick) {
     printf("닉네임: ");
     scanf("%s", new_account.nickname);
+
+    // 비속어 필터링 검사
+    if (contains_slang(new_account.nickname)) {
+      printf("❌ 닉네임에 부적절한 단어(욕설 등)가 포함되어 사용할 수 없습니다.\n");
+      continue;
+    }
 
     if (check_nickname_duplicate(conn, new_account.nickname)) {
       printf("이미 있는 닉네임입니다.\n");
@@ -185,15 +196,14 @@ void register_screen(MYSQL *conn) {
   printf("이름: ");
   scanf("%s", new_account.name);
 
-  printf("전공: ");
-  scanf("%s", new_account.major);
+  select_college_and_major(&new_account.college_code, &new_account.major_code);
 
   printf("전화번호 (예: 010-1234-5678): ");
   scanf("%s", new_account.phone);
 
   if (register_user(conn, new_account.id, new_account.pw,
                     new_account.nickname, new_account.student_id,
-                    new_account.name, new_account.major,
+                    new_account.name, new_account.college_code, new_account.major_code,
                     new_account.phone)) {
     printf("회원가입이 성공적으로 완료되었습니다!\n");
   }
