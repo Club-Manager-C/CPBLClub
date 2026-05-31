@@ -506,7 +506,7 @@ static void view_club_members_menu(MYSQL *conn, const char *logged_id) {
 
     char query[512];
     sprintf(query,
-            "SELECT u.name, u.id, cm.role FROM clubmembers cm "
+            "SELECT u.name, u.nickname, u.college_code, u.major_code, cm.role FROM clubmembers cm "
             "JOIN users u ON cm.user_idx = u.user_idx "
             "WHERE cm.club_id = %d ORDER BY FIELD(cm.role, 'Leader', 'Member'), u.name",
             club_id);
@@ -519,12 +519,16 @@ static void view_club_members_menu(MYSQL *conn, const char *logged_id) {
     MYSQL_RES *res = mysql_store_result(conn);
     if (!res) return;
 
-    printf("%-20s %-20s %-15s\n", "이름", "아이디(ID)", "직책/역할");
-    printf("---------------------------------------------------------\n");
+    printf("%-15s %-20s %-25s %-15s\n", "이름", "닉네임", "전공", "직책/역할");
+    printf("--------------------------------------------------------------------------------\n");
     MYSQL_ROW row;
     while ((row = mysql_fetch_row(res))) {
-        const char *role_str = (strcmp(row[2], "Leader") == 0) ? "동아리장" : "일반 멤버";
-        printf("%-20s %-20s %-15s\n", row[0], row[1], role_str);
+        int u_col = atoi(row[2]);
+        int u_maj = atoi(row[3]);
+        const char *major_name = get_major_name(u_col, u_maj);
+        const char *role_str = (strcmp(row[4], "Leader") == 0) ? "동아리장" : "일반 멤버";
+        
+        printf("%-15s %-20s %-25s %-15s\n", row[0], row[1], major_name, role_str);
     }
     mysql_free_result(res);
 }
