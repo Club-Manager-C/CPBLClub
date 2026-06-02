@@ -161,15 +161,7 @@ void home_screen(MYSQL *conn, const char *logged_id) {
 
   while (1) {
     if (is_currently_suspended(conn, logged_id)) return;
-    printf("\n============================\n");
-    printf("  메인 메뉴\n");
-    printf("============================\n");
-    printf("1. 동아리 목록 (카테고리별)\n");
-    printf("2. 마이페이지\n");
-    printf("3. 동아리 개설 신청\n");
-    printf("0. 로그아웃\n");
-    printf("============================\n");
-    printf("입력: ");
+    print_user_menu();
     scanf("%d", &choice);
 
     switch (choice) {
