@@ -1,16 +1,14 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <time.h>
-
 #include "auth.h"
 #include "board.h"
 #include "db.h"
 #include "mypage.h"
 #include "apply_period.h"
 #include "filter.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
 #include "major_info.h"
-#include "decorate.h"
 
 void run_admin_interface(MYSQL *conn);
 void view_clubs_by_category(MYSQL *conn, const char *logged_id);
@@ -161,7 +159,15 @@ void home_screen(MYSQL *conn, const char *logged_id) {
 
   while (1) {
     if (is_currently_suspended(conn, logged_id)) return;
-    print_user_menu();
+    printf("\n============================\n");
+    printf("  메인 메뉴\n");
+    printf("============================\n");
+    printf("1. 동아리 목록 (카테고리별)\n");
+    printf("2. 마이페이지\n");
+    printf("3. 동아리 개설 신청\n");
+    printf("0. 로그아웃\n");
+    printf("============================\n");
+    printf("입력: ");
     scanf("%d", &choice);
 
     switch (choice) {
@@ -205,7 +211,12 @@ int main() {
   char logged_id[50];
 
   while (1) {
-    print_main_menu(); // 로그인 화면 출력 함수
+    printf("\n=== 시작 화면 ===\n");
+    printf("1. 로그인\n");
+    printf("2. 회원가입\n");
+    printf("0. 종료\n");
+    printf("=====================\n");
+    printf("입력: ");
     scanf("%d", &choice);
 
     if (choice == 1) {
@@ -215,9 +226,9 @@ int main() {
       } else if (login_status == 2) {
         run_admin_interface(conn);
       }
-    } else if (choice == 2) { //회원 가입
+    } else if (choice == 2) {
       register_screen(conn);
-    } else if (choice == 0) { //종료
+    } else if (choice == 0) {
       printf("프로그램을 종료합니다.\n");
       break;
     } else {
