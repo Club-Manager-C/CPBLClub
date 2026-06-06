@@ -51,16 +51,15 @@ void show_board_menu(MYSQL *conn, int category_id, const char *logged_id) {
   int choice;
   while (1) {
     if (is_currently_suspended(conn, logged_id)) return;
-    printf("\n");
-    printf("        [ %s ]\n", cat_name);
-    printf("\n");
-
+    printf("\n=========================================\n");
+    printf("   %s\n", cat_name);
+    printf("=========================================\n");
     get_posts_by_category(conn, category_id);
 
-    printf("\n\n\n");
-    printf("------------------------------------------------------------\n");
-    printf("  [1] 글 상세 보기   [2] 글 작성   [3] 검색   [0] 뒤로가기\n");
-    printf("------------------------------------------------------------\n");
+    printf("\n1. 글 상세 보기\n");
+    printf("2. 글 작성\n");
+    printf("3. 게시글 검색\n");
+    printf("0. 뒤로가기\n");
     printf("입력: ");
     if (scanf("%d", &choice) != 1) {
       while (getchar() != '\n')
@@ -213,9 +212,7 @@ void write_post_menu(MYSQL *conn, int category_id, const char *logged_id) {
   char title[200];
   char content[1000];
 
-  printf("\n");
-  printf("              [ 새 글 작성 ]\n");
-  printf("\n");
+  printf("\n=== 새 글 작성 ===\n");
   printf("제목 입력: ");
   while (getchar() != '\n')
     ; // 버퍼 비우기
@@ -234,13 +231,9 @@ void write_post_menu(MYSQL *conn, int category_id, const char *logged_id) {
   }
 
   if (insert_post(conn, club_id, logged_id, category_id, title, content)) {
-    printf("\n");
     printf("✅ 글이 성공적으로 등록되었습니다!\n");
-    printf("\n");
-    wait_enter_and_clear("Enter 키를 눌러 게시글 목록으로 돌아갑니다...");
   } else {
     printf("❌ 글 등록에 실패했습니다.\n");
-    wait_enter_and_clear("Enter 키를 눌러 게시글 목록으로 돌아갑니다...");
   }
 }
 
@@ -284,22 +277,13 @@ int print_post_detail(MYSQL *conn, int post_id) {
   int u_col = atoi(row[3]);
   int u_maj = atoi(row[4]);
 
-  system("cls");
-
-  printf("\n");
-  printf("              [ 글 상세 보기 ]\n");
-  printf("\n");
-
-  printf("제목   : %s\n", title_str);
-  printf("작성자 : %s (%s)\n", row[2], get_major_name(u_col, u_maj));
-  printf("동아리 : %s\n", row[5]);
-  printf("작성일 : %s\n", row[8]);
-  printf("좋아요 : %s\n", row[9]);
-
-  printf("\n");
-  printf("------------------------------------------------------------\n");
-  printf("%s\n", row[1]);
-  printf("------------------------------------------------------------\n");
+  printf("\n==================================================\n");
+  printf(" 제목: %s\n", title_str);
+  printf(" [작성자: %s (%s) | 등록 동아리: %s]\n", row[2], get_major_name(u_col, u_maj), row[5]);
+  printf(" 작성일: %s | 좋아요: %s\n", row[8], row[9]);
+  printf("--------------------------------------------------\n");
+  printf(" %s\n", row[1]);
+  printf("==================================================\n");
   mysql_free_result(res);
   return 1;
 }
@@ -330,7 +314,6 @@ void view_post_detail_menu(MYSQL *conn, int post_id, const char *logged_id) {
       return;
     }
 
-    printf("\n\n");
     printf("1) 댓글 확인\n");
     printf("2) 댓글 작성\n");
     printf("3) 게시글 좋아요\n");
@@ -348,7 +331,6 @@ void view_post_detail_menu(MYSQL *conn, int post_id, const char *logged_id) {
     } else if (choice == 3) {
       if (like_post(conn, post_id, logged_id)) {
         printf("✅ 게시글에 좋아요를 눌렀습니다!\n");
-        
       }
     } else if (choice == 4) {
       if (club_id > 0) {
@@ -363,7 +345,7 @@ void view_post_detail_menu(MYSQL *conn, int post_id, const char *logged_id) {
 
       if (comment_count > 0) {
         int comment_num;
-        printf("\n\n상세보기 할 댓글 번호 입력 (0: 뒤로가기): ");
+        printf("\n상세보기 할 댓글 번호 입력 (0: 뒤로가기): ");
         if (scanf("%d", &comment_num) != 1) {
           while (getchar() != '\n')
             ;
@@ -372,9 +354,8 @@ void view_post_detail_menu(MYSQL *conn, int post_id, const char *logged_id) {
         if (comment_num > 0 && comment_num <= comment_count) {
           view_comment_detail_menu(conn, comment_ids[comment_num - 1],
                                    logged_id);
-        } else {
-            printf("잘못된 번호입니다.\n");
-            wait_enter_and_clear("Enter 키를 누르면 글 상세 화면으로 돌아갑니다...");
+        } else if (comment_num != 0) {
+          printf("잘못된 번호입니다.\n");
         }
       }
     } else if (choice == 2) {
@@ -501,25 +482,12 @@ void view_comment_detail_menu(MYSQL *conn, int comment_id,
     MYSQL_ROW row = mysql_fetch_row(res);
     int likes = get_comment_likes_count(conn, comment_id);
 
-    system("cls");
+    printf("\n=== 댓글 상세 정보 ===\n");
+    printf("작성자: %s | 좋아요: %d | 작성일: %s\n", row[0], likes, row[2]);
+    printf("내용: %s\n", row[1]);
 
-    printf("\n");
-    printf("              [ 댓글 상세 보기 ]\n");
-    printf("\n");
-
-    printf("작성자 : %s\n", row[0]);
-    printf("좋아요 : %d\n", likes);
-    printf("작성일 : %s\n", row[2]);
-
-    printf("\n");
-    printf("------------------------------------------------------------\n");
-    printf("%s\n", row[1]);
-    printf("------------------------------------------------------------\n");
-
-    printf("\n");
-    printf("              [ 대댓글 ]\n");
-    printf("\n");
-
+    printf("----------------------------------\n");
+    printf("[대댓글 목록]\n");
     char sub_query[512];
     sprintf(sub_query,
             "SELECT u.nickname, c.content, c.created_at "
