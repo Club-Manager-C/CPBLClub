@@ -2,7 +2,6 @@
 #include "board.h"
 #include "filter.h"
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include "major_info.h"
 
@@ -425,227 +424,6 @@ void manage_join_requests(MYSQL *conn, const char *logged_id) {
     }
 }
 
-static int select_my_managed_club(MYSQL *conn, const char *logged_id, char *out_club_name) {
-    char query[512];
-    char esc_logged_id[100];
-    mysql_real_escape_string(conn, esc_logged_id, logged_id, strlen(logged_id));
-
-    sprintf(query, 
-            "SELECT c.club_id, c.club_name FROM clubs c "
-            "JOIN clubmembers cm ON c.club_id = cm.club_id "
-            "JOIN users u ON cm.user_idx = u.user_idx "
-            "WHERE u.id = '%s' AND cm.role = 'Leader'", esc_logged_id);
-    
-    if (mysql_query(conn, query) != 0) {
-        printf("⚠️ 동아리 로딩 실패: %s\n", mysql_error(conn));
-        return 0;
-    }
-
-    MYSQL_RES *res = mysql_store_result(conn);
-    if (!res) return 0;
-
-    int row_count = mysql_num_rows(res);
-    if (row_count == 0) {
-        printf("⚠️ 현재 동아리장으로 관리 중인 동아리가 없습니다.\n");
-        mysql_free_result(res);
-        return 0;
-    }
-
-    printf("\n[내 관리 동아리 목록]\n");
-    MYSQL_ROW row;
-    while ((row = mysql_fetch_row(res))) {
-        printf(" - ID: %s | 동아리명: %s\n", row[0], row[1]);
-    }
-    mysql_free_result(res);
-    printf("--------------------------------------\n");
-
-    int club_id;
-    printf("동아리 ID(숫자) 선택: ");
-    if (scanf("%d", &club_id) != 1) {
-        printf("⚠️ 잘못된 입력입니다. 숫자를 입력해주세요.\n");
-        while (getchar() != '\n');
-        return 0;
-    }
-    while (getchar() != '\n'); // 버퍼 비우기
-
-    // 권한 및 존재 여부 재확인
-    sprintf(query,
-            "SELECT c.club_name FROM clubs c "
-            "JOIN clubmembers cm ON c.club_id = cm.club_id "
-            "JOIN users u ON cm.user_idx = u.user_idx "
-            "WHERE c.club_id = %d AND u.id = '%s' AND cm.role = 'Leader'",
-            club_id, esc_logged_id);
-
-    if (mysql_query(conn, query) != 0) {
-        printf("⚠️ 검증 중 실패: %s\n", mysql_error(conn));
-        return 0;
-    }
-
-    MYSQL_RES *check_res = mysql_store_result(conn);
-    if (!check_res || mysql_num_rows(check_res) == 0) {
-        printf("⚠️ 해당 동아리가 없거나 관리 권한이 없습니다.\n");
-        if (check_res) mysql_free_result(check_res);
-        return 0;
-    }
-
-    MYSQL_ROW check_row = mysql_fetch_row(check_res);
-    if (out_club_name && check_row) {
-        strcpy(out_club_name, check_row[0]);
-    }
-    mysql_free_result(check_res);
-
-    return club_id;
-}
-
-static void view_club_members_menu(MYSQL *conn, const char *logged_id) {
-    char club_name[100];
-    int club_id = select_my_managed_club(conn, logged_id, club_name);
-    if (club_id == 0) return;
-
-    printf("\n=== [%s] 동아리원 목록 조회 ===\n", club_name);
-
-    char query[512];
-    sprintf(query,
-            "SELECT u.name, u.nickname, u.college_code, u.major_code, cm.role FROM clubmembers cm "
-            "JOIN users u ON cm.user_idx = u.user_idx "
-            "WHERE cm.club_id = %d ORDER BY FIELD(cm.role, 'Leader', 'Member'), u.name",
-            club_id);
-
-    if (mysql_query(conn, query) != 0) {
-        printf("❌ 동아리원 목록 조회 실패: %s\n", mysql_error(conn));
-        return;
-    }
-
-    MYSQL_RES *res = mysql_store_result(conn);
-    if (!res) return;
-
-    printf("%-15s %-20s %-25s %-15s\n", "이름", "닉네임", "전공", "직책/역할");
-    printf("--------------------------------------------------------------------------------\n");
-    MYSQL_ROW row;
-    while ((row = mysql_fetch_row(res))) {
-        int u_col = atoi(row[2]);
-        int u_maj = atoi(row[3]);
-        const char *major_name = get_major_name(u_col, u_maj);
-        const char *role_str = (strcmp(row[4], "Leader") == 0) ? "동아리장" : "일반 멤버";
-        
-        printf("%-15s %-20s %-25s %-15s\n", row[0], row[1], major_name, role_str);
-    }
-    mysql_free_result(res);
-}
-
-static void delegate_club_leader_menu(MYSQL *conn, const char *logged_id) {
-    char club_name[100];
-    int club_id = select_my_managed_club(conn, logged_id, club_name);
-    if (club_id == 0) return;
-
-    printf("\n=== [%s] 동아리장 권한 위임 ===\n", club_name);
-    
-    char target_input[100];
-    printf("권한을 위임할 회원의 ID 또는 이름 입력: ");
-    fgets(target_input, sizeof(target_input), stdin);
-    target_input[strcspn(target_input, "\r\n")] = '\0';
-
-    if (strlen(target_input) == 0) {
-        printf("⚠️ 회원의 ID 또는 이름을 입력해주세요.\n");
-        return;
-    }
-
-    char esc_target[200];
-    mysql_real_escape_string(conn, esc_target, target_input, strlen(target_input));
-
-    // 동아리에 가입되어 있고, 일반 멤버인 사람인지 확인
-    char query[512];
-    sprintf(query,
-            "SELECT cm.user_idx, u.name, u.id FROM clubmembers cm "
-            "JOIN users u ON cm.user_idx = u.user_idx "
-            "WHERE cm.club_id = %d AND (u.id = '%s' OR u.name = '%s') AND cm.role = 'Member'",
-            club_id, esc_target, esc_target);
-
-    if (mysql_query(conn, query) != 0) {
-        printf("❌ 회원 검증 실패: %s\n", mysql_error(conn));
-        return;
-    }
-
-    MYSQL_RES *res = mysql_store_result(conn);
-    if (!res) return;
-
-    int row_count = mysql_num_rows(res);
-    if (row_count == 0) {
-        printf("❌ 해당 사용자가 존재하지 않거나, 이 동아리의 멤버가 아닙니다.\n");
-        mysql_free_result(res);
-        return;
-    }
-
-    MYSQL_ROW row = mysql_fetch_row(res);
-    int target_idx = atoi(row[0]);
-    char target_name[50]; strcpy(target_name, row[1]);
-    char target_id[50]; strcpy(target_id, row[2]);
-    mysql_free_result(res);
-
-    // 1. 기존 동아리장의 역할을 'Member'로 변경
-    char update_query[512];
-    sprintf(update_query,
-            "UPDATE clubmembers cm "
-            "JOIN users u ON cm.user_idx = u.user_idx "
-            "SET cm.role = 'Member' "
-            "WHERE cm.club_id = %d AND u.id = '%s'",
-            club_id, logged_id);
-    if (mysql_query(conn, update_query) != 0) {
-        printf("❌ 권한 위임 실패(1): %s\n", mysql_error(conn));
-        return;
-    }
-
-    // 2. 지정된 사용자의 역할을 'Leader'로 변경
-    sprintf(update_query,
-            "UPDATE clubmembers SET role = 'Leader' "
-            "WHERE club_id = %d AND user_idx = %d",
-            club_id, target_idx);
-    if (mysql_query(conn, update_query) != 0) {
-        printf("❌ 권한 위임 실패(2): %s\n", mysql_error(conn));
-        return;
-    }
-
-    // 3. clubs 테이블의 leader_idx 업데이트
-    sprintf(update_query,
-            "UPDATE clubs SET leader_idx = %d WHERE club_id = %d",
-            target_idx, club_id);
-    if (mysql_query(conn, update_query) != 0) {
-        printf("❌ 권한 위임 실패(3): %s\n", mysql_error(conn));
-        return;
-    }
-
-    // 4. 새 동아리장에게 알림 메시지 발송
-    char msg_content[500];
-    sprintf(msg_content, "귀하가 [%s] 동아리의 동아리장으로 권한 위임되었습니다.", club_name);
-    insert_message(conn, target_id, msg_content);
-
-    printf("✅ [%s] 님에게 [%s] 동아리장 권한을 성공적으로 위임했습니다.\n", target_name, club_name);
-}
-
-static void close_club_menu(MYSQL *conn, const char *logged_id) {
-    char club_name[100];
-    int club_id = select_my_managed_club(conn, logged_id, club_name);
-    if (club_id == 0) return;
-
-    printf("\n⚠️ 정말로 [%s] 동아리를 폐쇄하시겠습니까? (Y/N): ", club_name);
-    char confirm[10];
-    fgets(confirm, sizeof(confirm), stdin);
-    confirm[strcspn(confirm, "\r\n")] = '\0';
-
-    if (strcmp(confirm, "Y") == 0 || strcmp(confirm, "y") == 0) {
-        char delete_query[512];
-        sprintf(delete_query, "DELETE FROM clubs WHERE club_id = %d", club_id);
-        
-        if (mysql_query(conn, delete_query) != 0) {
-            printf("❌ 동아리 폐쇄 실패: %s\n", mysql_error(conn));
-        } else {
-            printf("\n✅ 동아리가 성공적으로 폐쇄되었습니다.\n");
-        }
-    } else {
-        printf("동아리 폐쇄를 취소했습니다.\n");
-    }
-}
-
 void club_leader_menu(MYSQL *conn, const char *logged_id) {
     int choice;
     while (1) {
@@ -655,9 +433,6 @@ void club_leader_menu(MYSQL *conn, const char *logged_id) {
         printf("============================\n");
         printf("1. 단체 공지 발송\n");
         printf("2. 가입 신청 관리\n");
-        printf("3. 동아리원 목록 조회\n");
-        printf("4. 동아리장 권한 위임\n");
-        printf("5. 동아리 폐쇄\n");
         printf("0. 뒤로\n");
         printf("============================\n");
         printf("입력: ");
@@ -669,9 +444,6 @@ void club_leader_menu(MYSQL *conn, const char *logged_id) {
         switch (choice) {
             case 1: send_announcement_menu(conn, logged_id); break;
             case 2: manage_join_requests(conn, logged_id); break;
-            case 3: view_club_members_menu(conn, logged_id); break;
-            case 4: delegate_club_leader_menu(conn, logged_id); break;
-            case 5: close_club_menu(conn, logged_id); break;
             case 0: return;
             default: printf("잘못된 입력입니다.\n");
         }
