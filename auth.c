@@ -1,12 +1,10 @@
+#include "auth.h"
+#include "filter.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <conio.h>
-
-#include "auth.h"
-#include "filter.h"
 #include "major_info.h"
-#include "decorate.h"
 
 // ─────────────────────────────────────────────
 // 비밀번호 별표 마스킹 입력 헬퍼 함수
@@ -208,8 +206,5 @@ void register_screen(MYSQL *conn) {
                     new_account.name, new_account.college_code, new_account.major_code,
                     new_account.phone)) {
     printf("회원가입이 성공적으로 완료되었습니다!\n");
-
-    printf("\n");
-    wait_enter_to_clear();
   }
 }
