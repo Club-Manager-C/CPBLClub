@@ -412,32 +412,32 @@ void get_posts_by_category(MYSQL *conn, int category_id) {
     return;
   }
 
-  printf("%-6s %-40s %-45s %-20s\n", "ID", "제목", "작성자 정보", "작성일");
-  printf("---------------------------------------------------------------------"
-         "---------------------------------------------\n");
+  printf("\n");
+  printf("%-6s ", "ID");
+  print_fixed_utf8("제목", 33);
+  printf(" %-15s %-12s\n", "작성자", "작성일");
+  printf("----------------------------------------------------------------\n");
+
   MYSQL_ROW row;
   while ((row = mysql_fetch_row(res))) {
-    char author_info[100];
-    int u_col = atoi(row[3]);
-    int u_maj = atoi(row[4]);
-    sprintf(author_info, "[작성자: %s (%s) | 등록 동아리: %s]", row[2],
-            get_major_name(u_col, u_maj), row[5]);
+      int u_col = atoi(row[3]);
+      int u_maj = atoi(row[4]);
 
-    char title_str[150];
-    if (row[6] && row[7]) {
-      int c_col = atoi(row[6]);
-      int c_maj = atoi(row[7]);
-      if (c_col > 0) {
-        sprintf(title_str, "[%s-%s] %s", get_college_name(c_col),
-                get_major_name(c_col, c_maj), row[1]);
-      } else {
-        strcpy(title_str, row[1]);
-      }
-    } else {
-      strcpy(title_str, row[1]);
-    }
-    printf("[%-4s] %-40s %-45s %s\n", row[0], title_str, author_info, row[8]);
-  }
+      char date_only[11];
+      strncpy(date_only, row[8], 10);
+      date_only[10] = '\0';
+
+      printf("[%-4s] ", row[0]);
+      print_fixed_utf8(row[1], 34);
+      printf(" %-10s %-12s\n", row[2], date_only);
+
+      printf("       전공: %s | 동아리: %s\n\n",
+            get_major_name(u_col, u_maj),
+            row[5]);
+  } 
+
+printf("----------------------------------------------------------------\n");
+
   mysql_free_result(res);
 }
 
