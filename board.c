@@ -372,8 +372,9 @@ void view_post_detail_menu(MYSQL *conn, int post_id, const char *logged_id) {
         if (comment_num > 0 && comment_num <= comment_count) {
           view_comment_detail_menu(conn, comment_ids[comment_num - 1],
                                    logged_id);
-        } else if (comment_num != 0) {
-          printf("잘못된 번호입니다.\n");
+        } else {
+            printf("잘못된 번호입니다.\n");
+            wait_enter_and_clear("Enter 키를 누르면 글 상세 화면으로 돌아갑니다...");
         }
       }
     } else if (choice == 2) {
@@ -500,12 +501,25 @@ void view_comment_detail_menu(MYSQL *conn, int comment_id,
     MYSQL_ROW row = mysql_fetch_row(res);
     int likes = get_comment_likes_count(conn, comment_id);
 
-    printf("\n=== 댓글 상세 정보 ===\n");
-    printf("작성자: %s | 좋아요: %d | 작성일: %s\n", row[0], likes, row[2]);
-    printf("내용: %s\n", row[1]);
+    system("cls");
 
-    printf("----------------------------------\n");
-    printf("[대댓글 목록]\n");
+    printf("\n");
+    printf("              [ 댓글 상세 보기 ]\n");
+    printf("\n");
+
+    printf("작성자 : %s\n", row[0]);
+    printf("좋아요 : %d\n", likes);
+    printf("작성일 : %s\n", row[2]);
+
+    printf("\n");
+    printf("------------------------------------------------------------\n");
+    printf("%s\n", row[1]);
+    printf("------------------------------------------------------------\n");
+
+    printf("\n");
+    printf("              [ 대댓글 ]\n");
+    printf("\n");
+
     char sub_query[512];
     sprintf(sub_query,
             "SELECT u.nickname, c.content, c.created_at "

@@ -89,7 +89,8 @@ int login_screen(MYSQL *conn, char *logged_id) {
     }
   }
 
-  printf("5번 틀렸습니다.\n");
+  printf("\n");
+  wait_enter_and_clear("5번 틀렸습니다. 로그인 화면으로 돌아갑니다...");
   return 0;
 }
 
