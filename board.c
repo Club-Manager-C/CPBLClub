@@ -284,13 +284,22 @@ int print_post_detail(MYSQL *conn, int post_id) {
   int u_col = atoi(row[3]);
   int u_maj = atoi(row[4]);
 
-  printf("\n==================================================\n");
-  printf(" 제목: %s\n", title_str);
-  printf(" [작성자: %s (%s) | 등록 동아리: %s]\n", row[2], get_major_name(u_col, u_maj), row[5]);
-  printf(" 작성일: %s | 좋아요: %s\n", row[8], row[9]);
-  printf("--------------------------------------------------\n");
-  printf(" %s\n", row[1]);
-  printf("==================================================\n");
+  system("cls");
+
+  printf("\n");
+  printf("              [ 글 상세 보기 ]\n");
+  printf("\n");
+
+  printf("제목   : %s\n", title_str);
+  printf("작성자 : %s (%s)\n", row[2], get_major_name(u_col, u_maj));
+  printf("동아리 : %s\n", row[5]);
+  printf("작성일 : %s\n", row[8]);
+  printf("좋아요 : %s\n", row[9]);
+
+  printf("\n");
+  printf("------------------------------------------------------------\n");
+  printf("%s\n", row[1]);
+  printf("------------------------------------------------------------\n");
   mysql_free_result(res);
   return 1;
 }
@@ -321,6 +330,7 @@ void view_post_detail_menu(MYSQL *conn, int post_id, const char *logged_id) {
       return;
     }
 
+    printf("\n\n");
     printf("1) 댓글 확인\n");
     printf("2) 댓글 작성\n");
     printf("3) 게시글 좋아요\n");
@@ -338,6 +348,7 @@ void view_post_detail_menu(MYSQL *conn, int post_id, const char *logged_id) {
     } else if (choice == 3) {
       if (like_post(conn, post_id, logged_id)) {
         printf("✅ 게시글에 좋아요를 눌렀습니다!\n");
+        
       }
     } else if (choice == 4) {
       if (club_id > 0) {
@@ -352,7 +363,7 @@ void view_post_detail_menu(MYSQL *conn, int post_id, const char *logged_id) {
 
       if (comment_count > 0) {
         int comment_num;
-        printf("\n상세보기 할 댓글 번호 입력 (0: 뒤로가기): ");
+        printf("\n\n상세보기 할 댓글 번호 입력 (0: 뒤로가기): ");
         if (scanf("%d", &comment_num) != 1) {
           while (getchar() != '\n')
             ;
